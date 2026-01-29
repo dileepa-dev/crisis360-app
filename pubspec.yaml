@@ -1,5 +1,5 @@
 name: crisis360app
-description: "A new Flutter project."
+description: "An app to help people who affected by the disasters."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -13,12 +13,20 @@ dependencies:
 
   cupertino_icons: ^1.0.8
   carousel_slider: ^5.0.0
+  http: ^1.6.0
+  flutter_launcher_icons: ^0.14.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
 
   flutter_lints: ^6.0.0
+  delightful_toast: ^1.1.0
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: assets/logo/logo2.png
 
 flutter:
   uses-material-design: true
@@ -26,6 +34,8 @@ flutter:
     - assets/logo/logo.png
     - assets/images/welcome_image_1.jpg
     - assets/images/welcome_image_2.jpg
+    - assets/images/login_page_image.png
+    - assets/images/register_page_image.jpg
 
   fonts:
      - family: Roboto

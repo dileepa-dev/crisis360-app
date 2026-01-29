@@ -1,5 +1,7 @@
+import 'package:crisis360app/features/register/register.dart';
 import 'package:flutter/material.dart';
 
+import 'features/login/login.dart';
 import 'features/welcome/welcome.dart';
 
 void main() {
@@ -20,7 +22,8 @@ class Crisis360App extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       routes: {
         // '/navbar': (context) => const NavigationMenu(),
-        // '/login': (context) => const Login(),
+        '/login': (context) => const Login(),
+        '/register':(context) => const RegisterPage(),
         // '/dashboard': (context) => const Dashboard(),
         // '/profile': (context) => const Profile(),
         // '/products': (context) => const Products(),
