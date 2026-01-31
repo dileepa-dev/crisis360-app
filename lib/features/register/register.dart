@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:delightful_toast/delight_toast.dart';
 import 'package:delightful_toast/toast/components/toast_card.dart';
 import 'package:delightful_toast/toast/utils/enums.dart';
-import 'register_controller.dart'; // You should create this like LoginController
+import 'register_controller.dart';
 
 void main() {
   runApp(const MaterialApp(
@@ -50,6 +50,7 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      resizeToAvoidBottomInset: false,
       appBar: AppBar(
         title: const Text('Register'),
         centerTitle: true,
@@ -75,7 +76,7 @@ class _RegisterPageState extends State<RegisterPage> {
               onProvinceChanged: (val) {
                 setState(() {
                   selectedProvince = val;
-                  selectedDistrict = null; // Reset district when province changes
+                  selectedDistrict = null;
                 });
               },
               onDistrictChanged: (val) {
@@ -301,7 +302,7 @@ class RegisterButton extends StatelessWidget {
                 _showToast(context, "Registration successful", const Color(0xFF2BED9D));
                 Navigator.pushNamed(context, '/login');
               } catch (e) {
-                _showToast(context, registerController.error ?? "Registration failed", const Color(0xFFBF7066));
+                _showToast(context, registerController.errorMessage?? "Registration failed", const Color(0xFFBF7066));
               }
             },
             style: ElevatedButton.styleFrom(

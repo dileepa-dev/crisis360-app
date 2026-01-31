@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "580113720390",
+    "project_id": "crisis-360-db",
+    "storage_bucket": "crisis-360-db.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:580113720390:android:4d2730b9c93015b2751647",
+        "android_client_info": {
+          "package_name": "com.example.crisis360app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAk2aN47zoa0dBtTOj1CB2zDQPv1Go28c0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
