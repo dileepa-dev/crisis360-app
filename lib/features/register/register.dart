@@ -300,7 +300,7 @@ class RegisterButton extends StatelessWidget {
                   password,
                 );
                 _showToast(context, "Registration successful", const Color(0xFF2BED9D));
-                Navigator.pushNamed(context, '/login');
+                Navigator.pushNamed(context, '/navbar');
               } catch (e) {
                 _showToast(context, registerController.errorMessage?? "Registration failed", const Color(0xFFBF7066));
               }

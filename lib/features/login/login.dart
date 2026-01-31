@@ -172,7 +172,7 @@ class LoginButton extends StatelessWidget {
                 _showSnackbar(context, "Login success", const Color(0xFF2BED9D));
                 Navigator.pushNamed(context, '/navbar');
               } catch (e) {
-                _showSnackbar(context, loginController.error ?? "Failed to sign in", const Color(
+                _showSnackbar(context, loginController.errorMessage ?? "Failed to sign in", const Color(
                     0xFFBF7066));
               }
             },
