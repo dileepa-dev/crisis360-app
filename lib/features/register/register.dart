@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:delightful_toast/delight_toast.dart';
 import 'package:delightful_toast/toast/components/toast_card.dart';
 import 'package:delightful_toast/toast/utils/enums.dart';
+import '../../widgets/loading_overlay.dart';
 import 'register_controller.dart';
 
 void main() {
@@ -27,6 +28,7 @@ class _RegisterPageState extends State<RegisterPage> {
 
   String? selectedProvince;
   String? selectedDistrict;
+  bool isLoading = false;
 
   // Sri Lankan provinces
   final List<String> provinces = [
@@ -49,53 +51,62 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      appBar: AppBar(
-        title: const Text('Register'),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-      ),
-      body: Container(
-        width: double.infinity,
-        height: MediaQuery.of(context).size.height,
-        color: Colors.white,
-        child: Stack(
-          children: [
-            const LogoAndTitle(),
-            RegisterPageImage(),
-            RegisterInputFields(
-              nameController: nameController,
-              emailController: emailController,
-              passwordController: passwordController,
-              confirmPasswordController: confirmPasswordController,
-              selectedProvince: selectedProvince,
-              selectedDistrict: selectedDistrict,
-              provinces: provinces,
-              districts: districts,
-              onProvinceChanged: (val) {
-                setState(() {
-                  selectedProvince = val;
-                  selectedDistrict = null;
-                });
-              },
-              onDistrictChanged: (val) {
-                setState(() {
-                  selectedDistrict = val;
-                });
-              },
-            ),
-            RegisterButton(
-              nameController: nameController,
-              emailController: emailController,
-              passwordController: passwordController,
-              confirmPasswordController: confirmPasswordController,
-              selectedProvince: selectedProvince,
-              selectedDistrict: selectedDistrict,
-              registerController: registerController,
-            ),
-            const AlreadyHaveAccountText(),
-          ],
+    return LoadingOverlay(
+      isLoading: isLoading,
+      child: Scaffold(
+        resizeToAvoidBottomInset: false,
+        appBar: AppBar(
+          title: const Text('Register'),
+          centerTitle: true,
+          backgroundColor: Colors.white,
+        ),
+        body: Container(
+          width: double.infinity,
+          height: MediaQuery.of(context).size.height,
+          color: Colors.white,
+          child: Stack(
+            children: [
+              const LogoAndTitle(),
+              const RegisterPageImage(),
+              RegisterInputFields(
+                nameController: nameController,
+                emailController: emailController,
+                passwordController: passwordController,
+                confirmPasswordController: confirmPasswordController,
+                selectedProvince: selectedProvince,
+                selectedDistrict: selectedDistrict,
+                provinces: provinces,
+                districts: districts,
+                onProvinceChanged: (val) {
+                  setState(() {
+                    selectedProvince = val;
+                    selectedDistrict = null;
+                  });
+                },
+                onDistrictChanged: (val) {
+                  setState(() {
+                    selectedDistrict = val;
+                  });
+                },
+              ),
+              RegisterButton(
+                nameController: nameController,
+                emailController: emailController,
+                passwordController: passwordController,
+                confirmPasswordController: confirmPasswordController,
+                selectedProvince: selectedProvince,
+                selectedDistrict: selectedDistrict,
+                registerController: registerController,
+                onStartLoading: () {
+                  setState(() => isLoading = true);
+                },
+                onStopLoading: () {
+                  setState(() => isLoading = false);
+                },
+              ),
+              const AlreadyHaveAccountText(),
+            ],
+          ),
         ),
       ),
     );
@@ -252,6 +263,8 @@ class RegisterButton extends StatelessWidget {
   final String? selectedProvince;
   final String? selectedDistrict;
   final RegisterController registerController;
+  final VoidCallback onStartLoading;
+  final VoidCallback onStopLoading;
 
   const RegisterButton({
     super.key,
@@ -262,6 +275,8 @@ class RegisterButton extends StatelessWidget {
     required this.selectedProvince,
     required this.selectedDistrict,
     required this.registerController,
+    required this.onStartLoading,
+    required this.onStopLoading,
   });
 
   @override
@@ -290,7 +305,7 @@ class RegisterButton extends StatelessWidget {
                 _showToast(context, "Passwords do not match", Colors.red);
                 return;
               }
-
+              onStartLoading();
               try {
                 await registerController.register(
                   name,
@@ -302,7 +317,10 @@ class RegisterButton extends StatelessWidget {
                 _showToast(context, "Registration successful", const Color(0xFF2BED9D));
                 Navigator.pushNamed(context, '/navbar');
               } catch (e) {
+                onStopLoading();
                 _showToast(context, registerController.errorMessage?? "Registration failed", const Color(0xFFBF7066));
+              } finally {
+                onStopLoading();
               }
             },
             style: ElevatedButton.styleFrom(

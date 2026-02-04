@@ -1,3 +1,4 @@
+import 'package:crisis360app/widgets/loading_overlay.dart';
 import 'package:flutter/material.dart';
 import 'package:delightful_toast/delight_toast.dart';
 import 'package:delightful_toast/toast/components/toast_card.dart';
@@ -23,38 +24,49 @@ class _LoginState extends State<Login> {
   final TextEditingController passwordController = TextEditingController();
   final LoginController loginController = LoginController();
 
+  bool isLoading = false;
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      resizeToAvoidBottomInset: false,
-      appBar: AppBar(
-        title: const Text('Login'),
-        centerTitle: true,
-        backgroundColor: Colors.white,
-      ),
-      body: Container(
-        width: double.infinity,
-        height: MediaQuery.of(context).size.height,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-        ),
-        child: Stack(
-          children: [
-            const LogoAndTitle(),
-            const LoginPageImage(),
-            LoginInputFields(
-              usernameController: usernameController,
-              passwordController: passwordController,
+    return LoadingOverlay(
+        isLoading: isLoading,
+        child: Scaffold(
+          resizeToAvoidBottomInset: false,
+          appBar: AppBar(
+            title: const Text('Login'),
+            centerTitle: true,
+            backgroundColor: Colors.white,
+          ),
+          body: Container(
+            width: double.infinity,
+            height: MediaQuery.of(context).size.height,
+            decoration: const BoxDecoration(
+              color: Colors.white,
             ),
-            LoginButton(
-              usernameController: usernameController,
-              passwordController: passwordController,
-              loginController: loginController,
+            child: Stack(
+              children: [
+                const LogoAndTitle(),
+                const LoginPageImage(),
+                LoginInputFields(
+                  usernameController: usernameController,
+                  passwordController: passwordController,
+                ),
+                LoginButton(
+                  usernameController: usernameController,
+                  passwordController: passwordController,
+                  loginController: loginController,
+                  onStartLoading: () {
+                    setState(() => isLoading = true);
+                  },
+                  onStopLoading: () {
+                    setState(() => isLoading = false);
+                  },
+                ),
+                const CreateAccountText(),
+              ],
             ),
-            const CreateAccountText(),
-          ],
-        ),
-      ),
+          ),
+        )
     );
   }
 }
@@ -134,12 +146,16 @@ class LoginButton extends StatelessWidget {
   final TextEditingController usernameController;
   final TextEditingController passwordController;
   final LoginController loginController;
+  final VoidCallback onStartLoading;
+  final VoidCallback onStopLoading;
 
   const LoginButton({
     super.key,
     required this.usernameController,
     required this.passwordController,
     required this.loginController,
+    required this.onStartLoading,
+    required this.onStopLoading,
   });
 
   @override
@@ -166,14 +182,17 @@ class LoginButton extends StatelessWidget {
                 _showSnackbar(context, "Password cannot be empty", Colors.red);
                 return;
               }
-
+              onStartLoading();
               try {
                 await loginController.login(username, password);
                 _showSnackbar(context, "Login success", const Color(0xFF2BED9D));
                 Navigator.pushNamed(context, '/navbar');
               } catch (e) {
+                onStopLoading();
                 _showSnackbar(context, loginController.errorMessage ?? "Failed to sign in", const Color(
                     0xFFBF7066));
+              } finally {
+                onStopLoading();
               }
             },
             style: ElevatedButton.styleFrom(
