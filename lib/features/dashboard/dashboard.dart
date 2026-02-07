@@ -1,71 +1,54 @@
-import 'package:crisis360app/features/dashboard/dashboard_controller.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
+import 'dashboard_controller.dart';
 
 class Dashboard extends StatelessWidget {
   const Dashboard({super.key});
 
   @override
   Widget build(BuildContext context) {
-    return Positioned(
-      top: 710,
-      left: 20,
-      right: 20,
-      child: Center(
-        child: SizedBox(
-          width: 250,
-          height: 60,
-          child: ElevatedButton(
-            onPressed: () async {
-              _showLogoutConfirmation(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF8162FF),
-              padding: const EdgeInsets.symmetric(vertical: 16.0),
-            ),
-            child: const Text(
-              'Logout',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w400,
-                color: Colors.white,
+    final controller = Get.put(DashboardController());
+
+    return Scaffold(
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              /// 👤 Logged-in user name
+              Obx(
+                    () => Text(
+                  'Hello, ${controller.userName.value}',
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ),
-            ),
+
+              const SizedBox(height: 20),
+
+              /// 🗺️ Map placeholder
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Map View',
+                      style: TextStyle(fontSize: 18),
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 }
-
-void _showLogoutConfirmation(BuildContext context) {
-  final DashboardController dashboardController = DashboardController();
-  showDialog(
-    context: context,
-    barrierDismissible: false, // user must choose
-    builder: (BuildContext context) {
-      return AlertDialog(
-        title: const Text("Confirm Logout"),
-        content: const Text("Are you sure you want to log out?"),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.of(context).pop(); // close dialog
-            },
-            child: const Text("No"),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.of(context).pop(); // close dialog first
-              await dashboardController.logout(context);
-            },
-            child: const Text(
-              "Yes",
-              style: TextStyle(color: Colors.red),
-            ),
-          ),
-        ],
-      );
-    },
-  );
-}
-

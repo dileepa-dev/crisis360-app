@@ -1,11 +1,15 @@
-
+import 'package:crisis360app/features/notifications/notifications_page.dart';
+import 'package:crisis360app/features/profile/profile_page.dart';
+import 'package:crisis360app/features/sos/sos_page.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import '../../features/dashboard/dashboard.dart';
 
 class NavigationMenu extends StatelessWidget {
+
   const NavigationMenu({super.key});
+
 
   @override
   Widget build(BuildContext context) {
@@ -17,64 +21,70 @@ class NavigationMenu extends StatelessWidget {
           decoration: BoxDecoration(
             color: Colors.white,
             border: const Border(
-              top: BorderSide(
-                color: Colors.black26,
-                width: 1.0,
-              ),
+              top: BorderSide(color: Colors.black26, width: 1),
             ),
             boxShadow: [
               BoxShadow(
                 color: Colors.grey.withOpacity(0.5),
-                spreadRadius: 1,
                 blurRadius: 5,
                 offset: const Offset(0, -2),
               ),
             ],
           ),
           child: NavigationBar(
-            backgroundColor: const Color(0xFFFFFFFF),
-            height: 80.0,
-            elevation: 0.0,
+            height: 80,
+            backgroundColor: Colors.white,
+            elevation: 0,
             selectedIndex: controller.selectedIndex.value,
-            onDestinationSelected: (index) => controller.selectedIndex.value = index,
+            onDestinationSelected: controller.changeIndex,
             destinations: const [
               NavigationDestination(
-                icon: Icon(Icons.rocket_launch),
-                label: 'Dashboard',
+                icon: Icon(Icons.public),
+                label: 'Map',
               ),
               NavigationDestination(
-                icon: Icon(Icons.shopping_cart),
-                label: 'Products',
+                icon: Icon(Icons.sos),
+                label: 'SOS',
               ),
               NavigationDestination(
-                icon: Icon(Icons.people),
-                label: 'Suppliers',
+                icon: Icon(Icons.notifications_active),
+                label: 'Notifications',
               ),
               NavigationDestination(
-                icon: Icon(Icons.supervised_user_circle_sharp),
-                label: 'Users',
-              ),
-              NavigationDestination(
-                icon: Icon(Icons.add_circle),
-                label: 'Add',
+                icon: Icon(Icons.person),
+                label: 'Profile',
               ),
             ],
           ),
         ),
       ),
-      body: Obx(() => controller.screens[controller.selectedIndex.value]),
+
+      /// ✅ FIX IS HERE
+      body: Obx(
+            () => IndexedStack(
+          index: controller.selectedIndex.value,
+          children: controller.screens,
+        ),
+      ),
     );
   }
 }
 
 class NavigationController extends GetxController {
-  final Rx<int> selectedIndex = 0.obs;
+  final RxInt selectedIndex = 0.obs;
+  @override
+  void onInit() {
+    selectedIndex.value = 0; // ensure dashboard is selected by default
+    super.onInit();
+  }
+  void changeIndex(int index) {
+    selectedIndex.value = index;
+  }
 
-  final screens = [
-    const Dashboard(),
-    // const Products(),
-    // const Suppliers(),
-    // const UserManagementPage(),
-    // const AddItems(),
+  final List<Widget> screens = const [
+    Dashboard(),
+    SosPage(),
+    NotificationsPage(),
+    ProfilePage(),
   ];
 }
