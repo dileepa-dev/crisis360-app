@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'dashboard_controller.dart';
 
 class Dashboard extends StatelessWidget {
@@ -9,46 +10,114 @@ class Dashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = Get.put(DashboardController());
 
-    return Scaffold(
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              /// 👤 Logged-in user name
-              Obx(
-                    () => Text(
-                  'Hello, ${controller.userName.value}',
-                  style: const TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w600,
-                  ),
+    return WillPopScope(
+        onWillPop: () async => false,
+        child: Scaffold(
+          appBar: AppBar(
+            // toolbarHeight: 40,
+            automaticallyImplyLeading: false,
+            elevation: 0,
+            centerTitle: true,
+            backgroundColor: Colors.blue,
+            title: Obx(
+                  () => Text(
+                'Hello, ${controller.userName.value}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-
-              const SizedBox(height: 20),
-
-              /// 🗺️ Map placeholder
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade200,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'Map View',
-                      style: TextStyle(fontSize: 18),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
-      ),
+          body: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.all(0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  /// 👤 Logged-in user name
+                  // Obx(
+                  //       () => Text(
+                  //     'Hello, ${controller.userName.value}',
+                  //     style: const TextStyle(
+                  //       fontSize: 22,
+                  //       fontWeight: FontWeight.w600,
+                  //     ),
+                  //   ),
+                  // ),
+
+                  // const SizedBox(height: 20),
+
+                  /// 🗺️ Google Map with border + controls
+                  Expanded(
+                    child: Obx(() {
+                      final location = controller.currentLocation.value;
+
+                      if (location == null) {
+                        return const Center(
+                          child: CircularProgressIndicator(),
+                        );
+                      }
+
+                      return Container(
+                        // decoration: BoxDecoration(
+                        //   // borderRadius: BorderRadius.circular(18),
+                        //   border: Border.all(
+                        //     // color: Colors.grey.shade400,
+                        //     // width: 1.5,
+                        //   ),
+                        // ),
+                        child: ClipRRect(
+                          // borderRadius: BorderRadius.circular(18),
+                          child: Stack(
+                            children: [
+                              GoogleMap(
+                                initialCameraPosition: CameraPosition(
+                                  target: location, // ✅ no !
+                                  zoom: 14,
+                                ),
+                                myLocationEnabled: true,
+                                myLocationButtonEnabled: false,
+                                zoomControlsEnabled: false,
+                                compassEnabled: true,
+                                buildingsEnabled: true,
+                                markers: controller.markers.value,
+                                onMapCreated: (GoogleMapController mapController) {
+                                  controller.mapController = mapController;
+                                },
+                              ),
+
+                              Positioned(
+                                right: 12,
+                                bottom: 12,
+                                child: Column(
+                                  children: [
+                                    FloatingActionButton(
+                                      heroTag: 'zoom_in',
+                                      mini: true,
+                                      onPressed: controller.zoomIn,
+                                      child: const Icon(Icons.add),
+                                    ),
+                                    const SizedBox(height: 8),
+                                    FloatingActionButton(
+                                      heroTag: 'zoom_out',
+                                      mini: true,
+                                      onPressed: controller.zoomOut,
+                                      child: const Icon(Icons.remove),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        )
     );
   }
 }

@@ -1,7 +1,11 @@
+import 'package:crisis360app/features/dashboard/dashboard.dart';
 import 'package:crisis360app/features/register/register.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:get/get_navigation/src/root/get_material_app.dart';
 
 import 'components/navbar/navbar.dart';
+import 'core/services/auth_service.dart';
 import 'features/login/login.dart';
 import 'features/welcome/welcome.dart';
 
@@ -13,20 +17,30 @@ Future<void> main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  runApp(const Crisis360App());
+  // Check if user is already logged in
+  final currentUser = FirebaseAuthService().currentUser;
+  // Lock orientation to portrait only
+  SystemChrome.setPreferredOrientations([
+    DeviceOrientation.portraitUp,
+    DeviceOrientation.portraitDown,
+  ]).then((_) {
+    runApp(Crisis360App(isLoggedIn: currentUser != null));
+  });
 }
 
 class Crisis360App extends StatelessWidget {
-  const Crisis360App({super.key});
+  
+  const Crisis360App({super.key, required this.isLoggedIn});
+  final bool isLoggedIn;
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return GetMaterialApp(
       title: 'Smart Stock',
       theme: ThemeData(
         fontFamily: 'Roboto',
       ),
-      home: const Welcome(),
+      home: isLoggedIn ? const NavigationMenu() : const Welcome(),
       debugShowCheckedModeBanner: false,
       routes: {
         '/navbar': (context) => const NavigationMenu(),
