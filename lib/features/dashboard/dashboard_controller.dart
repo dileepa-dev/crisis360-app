@@ -7,6 +7,7 @@ import 'package:location/location.dart';
 class DashboardController extends GetxController {
   final RxString userName = ''.obs;
   final RxBool isLoading = true.obs;
+  final userRole = ''.obs;
 
   late GoogleMapController mapController;
 
@@ -20,26 +21,35 @@ class DashboardController extends GetxController {
   @override
   void onInit() {
     super.onInit();
-    fetchUserName();
+    fetchUserData();
     initLocation();
     loadDummyRiskLocations();
   }
 
-  /// 👤 Fetch user name
-  Future<void> fetchUserName() async {
+  /// 👤 Fetch user name and role
+  Future<void> fetchUserData() async {
     try {
       final user = _auth.currentUser;
 
       if (user == null) {
         userName.value = 'Guest';
+        userRole.value = 'USER';
         return;
       }
 
-      final doc = await _firestore.collection('users').doc(user.uid).get();
+      final doc =
+      await _firestore.collection('users').doc(user.uid).get();
 
-      userName.value = doc.exists ? (doc['name'] ?? 'User') : 'User';
+      if (doc.exists) {
+        userName.value = doc.data()?['name'] ?? 'User';
+        userRole.value = doc.data()?['role'] ?? 'USER';
+      } else {
+        userName.value = 'User';
+        userRole.value = 'USER';
+      }
     } catch (e) {
       userName.value = 'Error';
+      userRole.value = 'USER';
     } finally {
       isLoading.value = false;
     }

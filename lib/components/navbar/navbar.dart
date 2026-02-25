@@ -1,10 +1,7 @@
-import 'package:crisis360app/features/notifications/notifications_page.dart';
-import 'package:crisis360app/features/profile/profile_page.dart';
-import 'package:crisis360app/features/sos/sos_page.dart';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
-import '../../features/dashboard/dashboard.dart';
+import 'navigation_controller.dart';
 
 class NavigationMenu extends StatelessWidget {
 
@@ -70,21 +67,21 @@ class NavigationMenu extends StatelessWidget {
   }
 }
 
-class NavigationController extends GetxController {
-  final RxInt selectedIndex = 0.obs;
-  @override
-  void onInit() {
-    selectedIndex.value = 0; // ensure dashboard is selected by default
-    super.onInit();
-  }
-  void changeIndex(int index) {
-    selectedIndex.value = index;
-  }
-
-  final List<Widget> screens = const [
-    Dashboard(),
-    SosPage(),
-    NotificationsPage(),
-    ProfilePage(),
-  ];
-}
+// class NavigationController extends GetxController {
+//   final RxInt selectedIndex = 0.obs;
+//   @override
+//   void onInit() {
+//     selectedIndex.value = 0; // ensure dashboard is selected by default
+//     super.onInit();
+//   }
+//   void changeIndex(int index) {
+//     selectedIndex.value = index;
+//   }
+//
+//   final List<Widget> screens = const [
+//     Dashboard(),
+//     SosPage(),
+//     NotificationsPage(),
+//     ProfilePage(),
+//   ];
+// }
