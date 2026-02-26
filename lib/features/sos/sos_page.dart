@@ -75,6 +75,7 @@ class _SosPageState extends State<SosPage> with SingleTickerProviderStateMixin {
         title: const Text('🚨 SOS'),
         centerTitle: true,
         backgroundColor: Colors.red,
+        automaticallyImplyLeading: false,
       ),
       body: Center(
         child: Obx(() {

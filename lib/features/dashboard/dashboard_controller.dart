@@ -4,8 +4,11 @@ import 'package:get/get.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:location/location.dart';
 
+import '../notifications/notification_controller.dart';
+
 class DashboardController extends GetxController {
   final RxString userName = ''.obs;
+  final RxString district = ''.obs;
   final RxBool isLoading = true.obs;
   final userRole = ''.obs;
 
@@ -17,13 +20,32 @@ class DashboardController extends GetxController {
 
   Rx<LatLng?> currentLocation = Rx<LatLng?>(null);
   RxSet<Marker> markers = <Marker>{}.obs;
-
+  late NotificationsController notificationsController;
   @override
   void onInit() {
     super.onInit();
-    fetchUserData();
+    initializeDashboard();
+    // fetchUserData();
+    // initLocation();
+    // loadDummyRiskLocations();
+    // notificationsController = NotificationsController(
+    //   district: district,
+    // );
+    //
+    // notificationsController.fetchNotifications();
+  }
+
+  Future<void> initializeDashboard() async {
+    await fetchUserData();   // ✅ WAIT until district is loaded
+
     initLocation();
     loadDummyRiskLocations();
+
+    notificationsController = NotificationsController(
+      district: district,
+    );
+
+    notificationsController.fetchNotifications(); // ✅ Now district has value
   }
 
   /// 👤 Fetch user name and role
@@ -41,6 +63,7 @@ class DashboardController extends GetxController {
       await _firestore.collection('users').doc(user.uid).get();
 
       if (doc.exists) {
+        district.value = doc.data()?['district'] ?? "district";
         userName.value = doc.data()?['name'] ?? 'User';
         userRole.value = doc.data()?['role'] ?? 'USER';
       } else {
