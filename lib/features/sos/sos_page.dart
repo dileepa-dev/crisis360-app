@@ -39,7 +39,7 @@ class _SosPageState extends State<SosPage> with SingleTickerProviderStateMixin {
   void _showSosConfirmation() {
     showDialog(
       context: context,
-      barrierDismissible: false, // User must choose an option
+      barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text("Confirm SOS"),
@@ -54,8 +54,8 @@ class _SosPageState extends State<SosPage> with SingleTickerProviderStateMixin {
                 backgroundColor: Colors.red,
               ),
               onPressed: () {
-                Navigator.of(context).pop(); // Close dialog
-                controller.sendSos();       // Send SOS
+                Navigator.of(context).pop();
+                controller.sendSos();
               },
               child: const Text(
                 "Share & Send",
@@ -91,7 +91,7 @@ class _SosPageState extends State<SosPage> with SingleTickerProviderStateMixin {
                   padding: const EdgeInsets.all(80),
                   backgroundColor: Colors.red,
                 ),
-                onPressed: _showSosConfirmation, // Call popup on press
+                onPressed: _showSosConfirmation,
                 child: const Text(
                   'SOS',
                   style: TextStyle(

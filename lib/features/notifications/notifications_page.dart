@@ -39,7 +39,7 @@ class NotificationsPage extends StatelessWidget {
 
             // 🔹 Show the list of notifications
             return RefreshIndicator(
-              onRefresh: controller.fetchNotifications, // Pull to refresh
+              onRefresh: controller.fetchNotifications,
               child: ListView.builder(
                 padding: const EdgeInsets.all(12),
                 itemCount: controller.notifications.length,

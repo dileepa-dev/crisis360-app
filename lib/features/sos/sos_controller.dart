@@ -4,6 +4,8 @@ import 'package:get/get.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 
+import '../../core/utils/api_endpoints.dart';
+
 class SosController extends GetxController {
   var isSending = false.obs;
   var currentPosition = Rxn<Position>();
@@ -54,7 +56,7 @@ class SosController extends GetxController {
 
     isSending.value = true;
 
-    final url = Uri.parse('http://172.20.10.2:8080/sos');
+    final url = Uri.parse(ApiEndpoints.authEndpoints.sosRequest);
     final body = jsonEncode({
       "userId": userId.value,
       "latitude": currentPosition.value!.latitude,

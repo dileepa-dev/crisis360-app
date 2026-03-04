@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:crisis360app/core/utils/api_endpoints.dart';
 import 'package:get/get.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -89,7 +90,7 @@ class ProfileController extends GetxController {
       isLoading.value = true;
 
       final response = await http.post(
-        Uri.parse("http://172.20.10.2:8080/send-safety"),
+        Uri.parse(ApiEndpoints.authEndpoints.sendSafety),
         headers: {
           "Content-Type": "application/json",
         },
