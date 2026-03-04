@@ -277,6 +277,9 @@ class NotificationsController extends ChangeNotifier {
       double severityLevel,
       ) async {
     try {
+      // 🔵 Show loader
+      _showLoader(context);
+
       final position = await getUserLocation();
 
       final response = await http.post(
@@ -296,6 +299,9 @@ class NotificationsController extends ChangeNotifier {
         }),
       );
 
+      // 🔵 Close loader
+      Navigator.of(context, rootNavigator: true).pop();
+
       if (response.statusCode == 200) {
         _showSnackbar(context, "Safety status submitted successfully ✅", Colors.green);
       } else {
@@ -303,8 +309,23 @@ class NotificationsController extends ChangeNotifier {
       }
 
     } catch (e) {
+
+      // 🔵 Close loader if error happens
+      Navigator.of(context, rootNavigator: true).pop();
+
       _showSnackbar(context, "Error: ${e.toString()} ❌", Colors.red);
     }
+  }
+  void _showLoader(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) {
+        return const Center(
+          child: CircularProgressIndicator(),
+        );
+      },
+    );
   }
   Future<Position> getUserLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();

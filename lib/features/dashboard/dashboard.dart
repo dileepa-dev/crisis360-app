@@ -34,18 +34,6 @@ class Dashboard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  /// 👤 Logged-in user name
-                  // Obx(
-                  //       () => Text(
-                  //     'Hello, ${controller.userName.value}',
-                  //     style: const TextStyle(
-                  //       fontSize: 22,
-                  //       fontWeight: FontWeight.w600,
-                  //     ),
-                  //   ),
-                  // ),
-
-                  // const SizedBox(height: 20),
 
                   /// 🗺️ Google Map with border + controls
                   Expanded(
@@ -59,15 +47,7 @@ class Dashboard extends StatelessWidget {
                       }
 
                       return Container(
-                        // decoration: BoxDecoration(
-                        //   // borderRadius: BorderRadius.circular(18),
-                        //   border: Border.all(
-                        //     // color: Colors.grey.shade400,
-                        //     // width: 1.5,
-                        //   ),
-                        // ),
                         child: ClipRRect(
-                          // borderRadius: BorderRadius.circular(18),
                           child: Stack(
                             children: [
                               GoogleMap(

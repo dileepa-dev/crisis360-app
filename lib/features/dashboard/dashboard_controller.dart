@@ -1,9 +1,15 @@
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:get/get.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:http/http.dart' as http;
 import 'package:location/location.dart';
 
+import '../../core/utils/api_endpoints.dart';
+import '../../models/SafetyPoint.dart';
+import '../../models/SosPoint.dart';
 import '../notifications/notification_controller.dart';
 
 class DashboardController extends GetxController {
@@ -25,27 +31,20 @@ class DashboardController extends GetxController {
   void onInit() {
     super.onInit();
     initializeDashboard();
-    // fetchUserData();
-    // initLocation();
-    // loadDummyRiskLocations();
-    // notificationsController = NotificationsController(
-    //   district: district,
-    // );
-    //
-    // notificationsController.fetchNotifications();
   }
 
   Future<void> initializeDashboard() async {
-    await fetchUserData();   // ✅ WAIT until district is loaded
+    await fetchUserData();
 
     initLocation();
-    loadDummyRiskLocations();
+    await loadSafetyPointsFromApi();
+    await loadSosPointsFromApi();
 
     notificationsController = NotificationsController(
       district: district,
     );
 
-    notificationsController.fetchNotifications(); // ✅ Now district has value
+    notificationsController.fetchNotifications();
   }
 
   /// 👤 Fetch user name and role
@@ -121,42 +120,93 @@ class DashboardController extends GetxController {
     }
   }
 
-  /// 🧪 Dummy risk locations
-  void loadDummyRiskLocations() {
-    final dummyData = [
-      {'lat': 6.9275, 'lng': 79.8620, 'risk': 'HIGH'},
-      {'lat': 6.9250, 'lng': 79.8580, 'risk': 'MEDIUM'},
-      {'lat': 6.9300, 'lng': 79.8650, 'risk': 'LOW'},
-    ];
+  Future<void> loadSafetyPointsFromApi() async {
+    try {
+      final uri = Uri.parse(ApiEndpoints.authEndpoints.loadMapPoints);
+      final res = await http.get(uri);
 
-    for (var item in dummyData) {
-      BitmapDescriptor color;
-
-      switch (item['risk']) {
-        case 'HIGH':
-          color = BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueRed,
-          );
-          break;
-        case 'MEDIUM':
-          color = BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueYellow,
-          );
-          break;
-        default:
-          color = BitmapDescriptor.defaultMarkerWithHue(
-            BitmapDescriptor.hueGreen,
-          );
+      if (res.statusCode != 200) {
+        print("Failed to load safety points: ${res.statusCode} ${res.body}");
+        return;
       }
 
-      markers.add(
-        Marker(
-          markerId: MarkerId('${item['lat']}_${item['lng']}'),
-          position: LatLng(item['lat'] as double , item['lng'] as double),
-          icon: color,
-          infoWindow: InfoWindow(title: 'Risk: ${item['risk']}'),
-        ),
-      );
+      final List<dynamic> arr = jsonDecode(res.body);
+      final points = arr.map((e) => SafetyPoint.fromJson(e)).toList();
+
+      // ✅ clear old markers
+      markers.clear();
+
+      for (final p in points) {
+        final hue = _riskHue(p.riskLevel);
+
+        markers.add(
+          Marker(
+            markerId: MarkerId(p.id),
+            position: LatLng(p.latitude, p.longitude),
+            icon: BitmapDescriptor.defaultMarkerWithHue(hue),
+            infoWindow: InfoWindow(title: 'Risk: ${p.riskLevel}'),
+          ),
+        );
+      }
+
+      markers.refresh();
+      print("Loaded markers: ${markers.length}");
+
+    } catch (e) {
+      print("Error loading safety points: $e");
+    }
+  }
+
+  Future<void> loadSosPointsFromApi() async {
+    try {
+      final uri = Uri.parse(ApiEndpoints.authEndpoints.loadSosPoints);
+
+      final res = await http.get(uri);
+
+      if (res.statusCode != 200) {
+        print("Failed to load SOS points: ${res.statusCode} ${res.body}");
+        return;
+      }
+
+      final List<dynamic> arr = jsonDecode(res.body);
+      final points = arr.map((e) => SosPoint.fromJson(e)).toList();
+
+      for (final p in points) {
+        // Optional: only show ACTIVE SOS
+        // if (p.status.toUpperCase() != "ACTIVE") continue;
+
+        final hue = _riskHue(p.riskLevel);
+
+        markers.add(
+          Marker(
+            markerId: MarkerId("SOS_${p.id}"),
+            position: LatLng(p.latitude, p.longitude),
+            icon: BitmapDescriptor.defaultMarkerWithHue(hue),
+            infoWindow: InfoWindow(
+              title: "SOS: ${p.riskLevel} (${p.status})",
+              snippet: "User: ${p.userId}",
+            ),
+          ),
+        );
+      }
+
+      markers.refresh();
+      print("Loaded SOS markers: ${points.length}");
+    } catch (e) {
+      print("Error loading SOS points: $e");
+    }
+  }
+
+  double _riskHue(String risk) {
+    switch (risk.toUpperCase()) {
+      case 'HIGH':
+        return BitmapDescriptor.hueRed;
+      case 'MEDIUM':
+        return BitmapDescriptor.hueYellow;
+      case 'LOW':
+        return BitmapDescriptor.hueGreen;
+      default:
+        return BitmapDescriptor.hueAzure;
     }
   }
 
