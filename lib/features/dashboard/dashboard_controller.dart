@@ -2,11 +2,13 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:get/get.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:location/location.dart';
 
+import '../../core/services/pushNotificationService.dart';
 import '../../core/utils/api_endpoints.dart';
 import '../../models/SafetyPoint.dart';
 import '../../models/SosPoint.dart';
@@ -23,14 +25,19 @@ class DashboardController extends GetxController {
   final Location _location = Location();
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final PushNotificationService pushService = PushNotificationService();
+
 
   Rx<LatLng?> currentLocation = Rx<LatLng?>(null);
   RxSet<Marker> markers = <Marker>{}.obs;
   late NotificationsController notificationsController;
   @override
-  void onInit() {
+  Future<void> onInit() async {
     super.onInit();
     initializeDashboard();
+    await FirebaseMessaging.instance.requestPermission();
+    final token = await FirebaseMessaging.instance.getToken();
+    print("FCM TOKEN: $token");
   }
 
   Future<void> initializeDashboard() async {
@@ -58,13 +65,18 @@ class DashboardController extends GetxController {
         return;
       }
 
-      final doc =
-      await _firestore.collection('users').doc(user.uid).get();
+      final doc = await _firestore.collection('users').doc(user.uid).get();
 
       if (doc.exists) {
         district.value = doc.data()?['district'] ?? "district";
         userName.value = doc.data()?['name'] ?? 'User';
         userRole.value = doc.data()?['role'] ?? 'USER';
+
+        /// 🔥 Initialize push notification
+        await pushService.initForUser(
+          userId: user.uid,
+          district: district.value,
+        );
       } else {
         userName.value = 'User';
         userRole.value = 'USER';

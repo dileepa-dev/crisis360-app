@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:crisis360app/core/services/auth_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
@@ -15,29 +14,69 @@ class LoginController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   Future<void> login(String email, String password) async {
+    errorMessage = null;
+
     try {
+      print("🟡 [LOGIN] Step 1: FirebaseAuth signIn start");
 
-      // 🔹 1. Login
-      UserCredential credential =
-      (await firebaseAuthService.value
-          .signInWithEmailAndPassword(email, password)) as UserCredential;
+      final credential = await FirebaseAuth.instance
+          .signInWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      )
+          .timeout(const Duration(seconds: 20));
 
-      String uid = credential.user!.uid;
+      final uid = credential.user?.uid;
+      if (uid == null) {
+        throw Exception("Login succeeded but uid is null");
+      }
 
-      // 🔹 2. Get user province + district from Firestore
-      DocumentSnapshot userDoc =
-      await _firestore.collection('users').doc(uid).get();
+      print("🟢 [LOGIN] Step 1 OK: uid=$uid");
+      print("🟡 [LOGIN] Step 2: Firestore users/$uid get start");
 
-      String province = userDoc['province'];
-      String district = userDoc['district'];
+      final userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get(const GetOptions(source: Source.server))
+          .timeout(const Duration(seconds: 15));
 
-      // 🔹 3. Register FCM token to backend
-      await registerFcmToken(province, district);
+      if (!userDoc.exists) {
+        throw Exception("User document not found in Firestore: users/$uid");
+      }
 
+      final data = userDoc.data();
+      if (data == null) {
+        throw Exception("User document has no data: users/$uid");
+      }
+
+      final province = (data['province'] ?? '').toString();
+      final district = (data['district'] ?? '').toString();
+
+      if (province.isEmpty || district.isEmpty) {
+        throw Exception("province/district missing in users/$uid");
+      }
+
+      print("🟢 [LOGIN] Step 2 OK: province=$province district=$district");
+      print("🟡 [LOGIN] Step 3: registerFcmToken start");
+
+      await registerFcmToken(province, district)
+          .timeout(const Duration(seconds: 15));
+
+      print("🟢 [LOGIN] Step 3 OK: token registered");
+    // } on TimeoutException catch (e) {
+    //   errorMessage = "Request timed out. Check emulator internet / Firebase.";
+    //   print("🔴 [LOGIN] TIMEOUT: $e");
     } on FirebaseAuthException catch (e) {
-      errorMessage = e.message ?? "Error when logging!";
-    } catch (e) {
-      errorMessage = "Unexpected error occurred";
+      errorMessage = e.message ?? "FirebaseAuth error: ${e.code}";
+      print("🔴 [LOGIN] FirebaseAuthException: code=${e.code} msg=${e.message}");
+    } on FirebaseException catch (e) {
+      // Firestore errors come here too
+      errorMessage = e.message ?? "Firebase error: ${e.code}";
+      print("🔴 [LOGIN] FirebaseException: code=${e.code} msg=${e.message}");
+    } catch (e, st) {
+      errorMessage = "Unexpected error: $e";
+      print("🔴 [LOGIN] Unknown error: $e");
+      print(st);
     }
   }
 

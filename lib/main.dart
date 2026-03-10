@@ -1,75 +1,112 @@
 import 'package:crisis360app/features/register/register.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:get/get_core/src/get_main.dart';
-import 'package:get/get_navigation/src/extension_navigation.dart';
-import 'package:get/get_navigation/src/root/get_material_app.dart';
+import 'package:get/get.dart';
 
 import 'components/navbar/navbar.dart';
 import 'core/services/auth_service.dart';
 import 'features/login/login.dart';
 import 'features/welcome/welcome.dart';
-
-import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  // Setup FCM listeners
-  setupFCMListeners();
-  // Check if user is already logged in
+
+  print("Background message received: ${message.messageId}");
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+
+  FirebaseMessaging.onBackgroundMessage(
+    _firebaseMessagingBackgroundHandler,
+  );
+
+  await requestNotificationPermission();
+  await setupFCMListeners();
+
   final currentUser = FirebaseAuthService().currentUser;
-  // Lock orientation to portrait only
-  SystemChrome.setPreferredOrientations([
+
+  await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
-  ]).then((_) {
-    runApp(Crisis360App(isLoggedIn: currentUser != null));
-  });
-}
-void setupFCMListeners() {
-  // 🔥 FOREGROUND
+  ]);
+
   FirebaseMessaging.onMessage.listen((RemoteMessage message) {
-    if (message.data['type'] == "SAFETY_CHECK") {
-      Get.defaultDialog(
-        title: "Safety Confirmation",
-        middleText: "Are you safe?",
-        textConfirm: "Yes",
-        textCancel: "No",
-        onConfirm: () {
-          Get.back();
-        },
-        onCancel: () {},
-      );
-    }
+    print("NOTIFICATION RECEIVED");
+    print(message.notification?.title);
+    print(message.notification?.body);
   });
 
-  // 🔥 When user taps notification (Background / Closed)
-  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
-    if (message.data['type'] == "SAFETY_CHECK") {
-      Get.defaultDialog(
-        title: "Safety Confirmation",
-        middleText: "Are you safe?",
-        textConfirm: "Yes",
-        textCancel: "No",
-      );
-    }
+  runApp(Crisis360App(isLoggedIn: currentUser != null));
+}
+
+Future<void> requestNotificationPermission() async {
+  FirebaseMessaging messaging = FirebaseMessaging.instance;
+
+  NotificationSettings settings = await messaging.requestPermission(
+    alert: true,
+    badge: true,
+    sound: true,
+    provisional: false,
+  );
+
+  print("Permission: ${settings.authorizationStatus}");
+}
+
+Future<void> setupFCMListeners() async {
+  // App opened from terminated state by tapping notification
+  RemoteMessage? initialMessage =
+  await FirebaseMessaging.instance.getInitialMessage();
+
+  if (initialMessage != null) {
+    handleSafetyMessage(initialMessage);
+  }
+
+  // Foreground
+  FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+    handleSafetyMessage(message);
   });
+
+  // Background -> opened by tapping notification
+  FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    handleSafetyMessage(message);
+  });
+}
+
+void handleSafetyMessage(RemoteMessage message) {
+  if (message.data['type'] == "SAFETY_CHECK") {
+    Get.defaultDialog(
+      title: "Safety Confirmation",
+      middleText: "Are you safe?",
+      textConfirm: "Yes",
+      textCancel: "No",
+      onConfirm: () {
+        Get.back();
+      },
+      onCancel: () {},
+    );
+  }
 }
 
 class Crisis360App extends StatelessWidget {
-  
   const Crisis360App({super.key, required this.isLoggedIn});
+
   final bool isLoggedIn;
 
   @override
   Widget build(BuildContext context) {
     return GetMaterialApp(
-      title: 'Smart Stock',
+      title: 'Crisis360',
       theme: ThemeData(
         fontFamily: 'Roboto',
       ),
@@ -78,8 +115,7 @@ class Crisis360App extends StatelessWidget {
       routes: {
         '/navbar': (context) => const NavigationMenu(),
         '/login': (context) => const Login(),
-        '/register':(context) => const RegisterPage(),
-        // '/dashboard': (context) => const Dashboard(),
+        '/register': (context) => const RegisterPage(),
       },
     );
   }
