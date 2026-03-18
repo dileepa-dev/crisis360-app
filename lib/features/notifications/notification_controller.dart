@@ -1,11 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:crisis360app/core/utils/api_endpoints.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get_rx/src/rx_types/rx_types.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
 import 'package:delightful_toast/delight_toast.dart';
 import 'package:delightful_toast/toast/components/toast_card.dart';
 import 'package:delightful_toast/toast/utils/enums.dart';
@@ -18,14 +18,19 @@ class NotificationsController extends ChangeNotifier {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   String? userId;
 
+  bool _isDisposed = false;
+
   NotificationsController({required this.district}) {
-    fetchNotifications();
     fetchLoggedUser();
-    // Refresh notifications every 10s
-    _timer = Timer.periodic(Duration(seconds: 10), (_) {
-      fetchNotifications();
+    fetchNotifications();
+
+    _timer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (!_isDisposed) {
+        fetchNotifications();
+      }
     });
   }
+
   void fetchLoggedUser() {
     final user = _auth.currentUser;
 
@@ -38,15 +43,22 @@ class NotificationsController extends ChangeNotifier {
   }
 
   Future<void> fetchNotifications() async {
+    if (_isDisposed) return;
+
     isLoading = true;
-    notifyListeners();
+    if (!_isDisposed) notifyListeners();
+
     try {
       final response = await http.get(
         Uri.parse(
           '${ApiEndpoints.authEndpoints.getNotifications}/${district.value}',
         ),
       );
+
+      if (_isDisposed) return;
+
       print("District: ${district.value}");
+
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
         notifications = data.map((e) => Map<String, dynamic>.from(e)).toList();
@@ -54,12 +66,17 @@ class NotificationsController extends ChangeNotifier {
         print("Failed to load notifications");
       }
     } catch (e) {
-      print("Error fetching notifications: $e");
+      if (!_isDisposed) {
+        print("Error fetching notifications: $e");
+      }
     } finally {
+      if (_isDisposed) return;
+
       isLoading = false;
-      notifyListeners();
+      if (!_isDisposed) notifyListeners();
     }
   }
+
   void showSafetyPopup(BuildContext parentContext, Map<String, dynamic> notif) {
     final TextEditingController messageController = TextEditingController();
     final formKey = GlobalKey<FormState>();
@@ -78,10 +95,9 @@ class NotificationsController extends ChangeNotifier {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
       ),
-      builder: (sheetContext) { // ✅ this is the correct context to pop
+      builder: (sheetContext) {
         return StatefulBuilder(
           builder: (sheetContext, setState) {
-
             Future<void> validateAndSubmit() async {
               final isFormValid = formKey.currentState?.validate() ?? false;
 
@@ -109,7 +125,6 @@ class NotificationsController extends ChangeNotifier {
                 severityLevel,
               );
 
-              // ✅ pop safely using sheetContext
               if (Navigator.of(sheetContext).canPop()) {
                 Navigator.of(sheetContext).pop();
               }
@@ -166,8 +181,10 @@ class NotificationsController extends ChangeNotifier {
                       if (isSafeError != null)
                         Padding(
                           padding: const EdgeInsets.only(left: 12, bottom: 8),
-                          child: Text(isSafeError!,
-                              style: const TextStyle(color: Colors.red, fontSize: 12)),
+                          child: Text(
+                            isSafeError!,
+                            style: const TextStyle(color: Colors.red, fontSize: 12),
+                          ),
                         ),
 
                       const SizedBox(height: 10),
@@ -217,8 +234,10 @@ class NotificationsController extends ChangeNotifier {
                       if (needHelpError != null)
                         Padding(
                           padding: const EdgeInsets.only(left: 12, bottom: 8),
-                          child: Text(needHelpError!,
-                              style: const TextStyle(color: Colors.red, fontSize: 12)),
+                          child: Text(
+                            needHelpError!,
+                            style: const TextStyle(color: Colors.red, fontSize: 12),
+                          ),
                         ),
 
                       const SizedBox(height: 15),
@@ -267,6 +286,7 @@ class NotificationsController extends ChangeNotifier {
       },
     );
   }
+
   Future<void> submitSafetyStatus(
       BuildContext context,
       String message,
@@ -277,7 +297,6 @@ class NotificationsController extends ChangeNotifier {
       double severityLevel,
       ) async {
     try {
-      // 🔵 Show loader
       _showLoader(context);
 
       final position = await getUserLocation();
@@ -299,23 +318,24 @@ class NotificationsController extends ChangeNotifier {
         }),
       );
 
-      // 🔵 Close loader
-      Navigator.of(context, rootNavigator: true).pop();
+      if (Navigator.of(context, rootNavigator: true).canPop()) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
 
       if (response.statusCode == 200) {
         _showSnackbar(context, "Safety status submitted successfully ✅", Colors.green);
       } else {
         _showSnackbar(context, "Submission failed ❌", Colors.red);
       }
-
     } catch (e) {
-
-      // 🔵 Close loader if error happens
-      Navigator.of(context, rootNavigator: true).pop();
+      if (Navigator.of(context, rootNavigator: true).canPop()) {
+        Navigator.of(context, rootNavigator: true).pop();
+      }
 
       _showSnackbar(context, "Error: ${e.toString()} ❌", Colors.red);
     }
   }
+
   void _showLoader(BuildContext context) {
     showDialog(
       context: context,
@@ -327,6 +347,7 @@ class NotificationsController extends ChangeNotifier {
       },
     );
   }
+
   Future<Position> getUserLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
@@ -363,9 +384,10 @@ class NotificationsController extends ChangeNotifier {
       autoDismiss: true,
     ).show(context);
   }
-  // Cancel the timer when the controller is disposed
+
   @override
   void dispose() {
+    _isDisposed = true;
     _timer?.cancel();
     super.dispose();
   }

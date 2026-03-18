@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -7,7 +8,6 @@ import 'package:http/http.dart' as http;
 import '../../core/utils/api_endpoints.dart';
 
 class LoginController {
-
   String? errorMessage;
 
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -19,7 +19,7 @@ class LoginController {
     try {
       print("🟡 [LOGIN] Step 1: FirebaseAuth signIn start");
 
-      final credential = await FirebaseAuth.instance
+      final credential = await _auth
           .signInWithEmailAndPassword(
         email: email.trim(),
         password: password,
@@ -34,7 +34,7 @@ class LoginController {
       print("🟢 [LOGIN] Step 1 OK: uid=$uid");
       print("🟡 [LOGIN] Step 2: Firestore users/$uid get start");
 
-      final userDoc = await FirebaseFirestore.instance
+      final userDoc = await _firestore
           .collection('users')
           .doc(uid)
           .get(const GetOptions(source: Source.server))
@@ -49,11 +49,11 @@ class LoginController {
         throw Exception("User document has no data: users/$uid");
       }
 
-      final province = (data['province'] ?? '').toString();
-      final district = (data['district'] ?? '').toString();
+      final province = _normalize(data['province']);
+      final district = _normalize(data['district']);
 
-      if (province.isEmpty || district.isEmpty) {
-        throw Exception("province/district missing in users/$uid");
+      if (province == null || district == null) {
+        throw Exception("Province or district is missing/invalid in users/$uid");
       }
 
       print("🟢 [LOGIN] Step 2 OK: province=$province district=$district");
@@ -63,14 +63,13 @@ class LoginController {
           .timeout(const Duration(seconds: 15));
 
       print("🟢 [LOGIN] Step 3 OK: token registered");
-    // } on TimeoutException catch (e) {
-    //   errorMessage = "Request timed out. Check emulator internet / Firebase.";
-    //   print("🔴 [LOGIN] TIMEOUT: $e");
+    } on TimeoutException catch (e) {
+      errorMessage = "Request timed out. Check internet connection.";
+      print("🔴 [LOGIN] TIMEOUT: $e");
     } on FirebaseAuthException catch (e) {
       errorMessage = e.message ?? "FirebaseAuth error: ${e.code}";
       print("🔴 [LOGIN] FirebaseAuthException: code=${e.code} msg=${e.message}");
     } on FirebaseException catch (e) {
-      // Firestore errors come here too
       errorMessage = e.message ?? "Firebase error: ${e.code}";
       print("🔴 [LOGIN] FirebaseException: code=${e.code} msg=${e.message}");
     } catch (e, st) {
@@ -80,23 +79,50 @@ class LoginController {
     }
   }
 
-  Future<void> registerFcmToken(
-      String province,
-      String district,
-      ) async {
+  Future<void> registerFcmToken(String province, String district) async {
+    final normalizedProvince = _normalize(province);
+    final normalizedDistrict = _normalize(district);
 
-    String? token = await FirebaseMessaging.instance.getToken();
+    if (normalizedProvince == null || normalizedDistrict == null) {
+      throw Exception("Province or district is invalid while registering token");
+    }
 
-    if (token == null) return;
+    final token = await FirebaseMessaging.instance.getToken();
 
-    await http.post(
+    if (token == null || token.trim().isEmpty) {
+      throw Exception("FCM token is null or empty");
+    }
+
+    print("🟡 [FCM] Saving token to backend");
+    print("🟡 [FCM] province=$normalizedProvince district=$normalizedDistrict");
+
+    final response = await http.post(
       Uri.parse(ApiEndpoints.authEndpoints.saveToken),
       headers: {"Content-Type": "application/json"},
       body: jsonEncode({
-        "token": token,
-        "province": province,
-        "district": district,
+        "token": token.trim(),
+        "province": normalizedProvince,
+        "district": normalizedDistrict,
       }),
     );
+
+    print("🟡 [FCM] save-token response: ${response.statusCode}");
+    print("🟡 [FCM] save-token body: ${response.body}");
+
+    if (response.statusCode != 200) {
+      throw Exception("Failed to save token: ${response.statusCode} ${response.body}");
+    }
+  }
+
+  String? _normalize(dynamic value) {
+    if (value == null) return null;
+
+    final text = value.toString().trim();
+
+    if (text.isEmpty) return null;
+    if (text.toLowerCase() == 'null') return null;
+    if (text.toLowerCase() == 'undefined') return null;
+
+    return text;
   }
 }

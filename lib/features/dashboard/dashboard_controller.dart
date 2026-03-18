@@ -17,6 +17,7 @@ import '../notifications/notification_controller.dart';
 class DashboardController extends GetxController {
   final RxString userName = ''.obs;
   final RxString district = ''.obs;
+  final RxString province = ''.obs;
   final RxBool isLoading = true.obs;
   final userRole = ''.obs;
 
@@ -27,34 +28,47 @@ class DashboardController extends GetxController {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final PushNotificationService pushService = PushNotificationService();
 
-
   Rx<LatLng?> currentLocation = Rx<LatLng?>(null);
   RxSet<Marker> markers = <Marker>{}.obs;
-  late NotificationsController notificationsController;
+
+  NotificationsController? notificationsController;
+
+  bool _isSavingToken = false;
+
   @override
   Future<void> onInit() async {
     super.onInit();
-    initializeDashboard();
-    await FirebaseMessaging.instance.requestPermission();
-    final token = await FirebaseMessaging.instance.getToken();
-    print("FCM TOKEN: $token");
+    await initializeDashboard();
   }
 
   Future<void> initializeDashboard() async {
-    await fetchUserData();
+    try {
+      await FirebaseMessaging.instance.requestPermission();
 
-    initLocation();
-    await loadSafetyPointsFromApi();
-    await loadSosPointsFromApi();
+      final token = await FirebaseMessaging.instance.getToken();
+      print("[Dashboard] FCM TOKEN: $token");
 
-    notificationsController = NotificationsController(
-      district: district,
-    );
+      await fetchUserData();
 
-    notificationsController.fetchNotifications();
+      await _registerFcmTokenIfPossible();
+
+      await initLocation();
+      await loadSafetyPointsFromApi();
+      await loadSosPointsFromApi();
+
+      notificationsController = NotificationsController(
+        district: district,
+      );
+
+      // await notificationsController?.fetchNotifications();
+      await fetchNotifications(district as String);
+    } catch (e) {
+      print("[Dashboard] initializeDashboard error: $e");
+    } finally {
+      isLoading.value = false;
+    }
   }
 
-  /// 👤 Fetch user name and role
   Future<void> fetchUserData() async {
     try {
       final user = _auth.currentUser;
@@ -62,61 +76,138 @@ class DashboardController extends GetxController {
       if (user == null) {
         userName.value = 'Guest';
         userRole.value = 'USER';
+        province.value = '';
+        district.value = '';
+        print("[Dashboard] No logged user found");
         return;
       }
 
       final doc = await _firestore.collection('users').doc(user.uid).get();
 
-      if (doc.exists) {
-        district.value = doc.data()?['district'] ?? "district";
-        userName.value = doc.data()?['name'] ?? 'User';
-        userRole.value = doc.data()?['role'] ?? 'USER';
+      if (!doc.exists || doc.data() == null) {
+        userName.value = 'User';
+        userRole.value = 'USER';
+        province.value = '';
+        district.value = '';
+        print("[Dashboard] User document not found");
+        return;
+      }
 
-        /// 🔥 Initialize push notification
+      final data = doc.data()!;
+
+      userName.value = _normalize(data['name']) ?? 'User';
+      userRole.value = _normalize(data['role']) ?? 'USER';
+      province.value = _normalize(data['province']) ?? '';
+      district.value = _normalize(data['district']) ?? '';
+
+      print("[Dashboard] userName=${userName.value}");
+      print("[Dashboard] role=${userRole.value}");
+      print("[Dashboard] province=${province.value}");
+      print("[Dashboard] district=${district.value}");
+
+      if (district.value.isNotEmpty) {
         await pushService.initForUser(
           userId: user.uid,
           district: district.value,
         );
       } else {
-        userName.value = 'User';
-        userRole.value = 'USER';
+        print("[Dashboard] pushService skipped: district is invalid");
       }
     } catch (e) {
       userName.value = 'Error';
       userRole.value = 'USER';
-    } finally {
-      isLoading.value = false;
+      province.value = '';
+      district.value = '';
+      print("[Dashboard] fetchUserData error: $e");
     }
   }
 
-  /// 📍 INIT LOCATION (FIXED)
+  Future<void> _registerFcmTokenIfPossible() async {
+    if (_isSavingToken) return;
+    _isSavingToken = true;
+
+    try {
+      final user = _auth.currentUser;
+      if (user == null) {
+        print("[Dashboard] save-token skipped: user is null");
+        return;
+      }
+
+      final safeProvince = _normalize(province.value);
+      final safeDistrict = _normalize(district.value);
+
+      if (safeProvince == null || safeDistrict == null) {
+        print("[Dashboard] save-token skipped: province/district invalid");
+        print("[Dashboard] province=${province.value}, district=${district.value}");
+        return;
+      }
+
+      final token = await FirebaseMessaging.instance.getToken();
+
+      if (token == null || token.trim().isEmpty) {
+        print("[Dashboard] save-token skipped: FCM token is null/empty");
+        return;
+      }
+
+      final body = {
+        "token": token.trim(),
+        "province": safeProvince,
+        "district": safeDistrict,
+      };
+
+      print("[Dashboard] Sending save-token request: $body");
+
+      final response = await http.post(
+        Uri.parse(ApiEndpoints.authEndpoints.saveToken),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(body),
+      );
+
+      print("[Dashboard] save-token response code: ${response.statusCode}");
+      print("[Dashboard] save-token response body: ${response.body}");
+
+      if (response.statusCode != 200) {
+        print("[Dashboard] save-token failed");
+      }
+    } catch (e) {
+      print("[Dashboard] _registerFcmTokenIfPossible error: $e");
+    } finally {
+      _isSavingToken = false;
+    }
+  }
+
+  String? _normalize(dynamic value) {
+    if (value == null) return null;
+
+    final text = value.toString().trim();
+
+    if (text.isEmpty) return null;
+    if (text.toLowerCase() == 'null') return null;
+    if (text.toLowerCase() == 'undefined') return null;
+
+    return text;
+  }
+
   Future<void> initLocation() async {
     try {
-      // 1️⃣ Check service
       bool serviceEnabled = await _location.serviceEnabled();
       if (!serviceEnabled) {
         serviceEnabled = await _location.requestService();
         if (!serviceEnabled) return;
       }
 
-      // 2️⃣ Check permission
       PermissionStatus permission = await _location.hasPermission();
       if (permission == PermissionStatus.denied) {
         permission = await _location.requestPermission();
         if (permission != PermissionStatus.granted) return;
       }
 
-      // 3️⃣ Get location
       final loc = await _location.getLocation();
 
       if (loc.latitude == null || loc.longitude == null) return;
 
-      currentLocation.value = LatLng(
-        loc.latitude!,
-        loc.longitude!,
-      );
+      currentLocation.value = LatLng(loc.latitude!, loc.longitude!);
 
-      // 4️⃣ Add user marker
       markers.add(
         Marker(
           markerId: const MarkerId('me'),
@@ -128,7 +219,7 @@ class DashboardController extends GetxController {
         ),
       );
     } catch (e) {
-      print('Location error: $e');
+      print('[Dashboard] Location error: $e');
     }
   }
 
@@ -138,15 +229,14 @@ class DashboardController extends GetxController {
       final res = await http.get(uri);
 
       if (res.statusCode != 200) {
-        print("Failed to load safety points: ${res.statusCode} ${res.body}");
+        print("[Dashboard] Failed to load safety points: ${res.statusCode} ${res.body}");
         return;
       }
 
       final List<dynamic> arr = jsonDecode(res.body);
       final points = arr.map((e) => SafetyPoint.fromJson(e)).toList();
 
-      // ✅ clear old markers
-      markers.clear();
+      markers.removeWhere((m) => m.markerId.value != 'me');
 
       for (final p in points) {
         final hue = _riskHue(p.riskLevel);
@@ -162,21 +252,19 @@ class DashboardController extends GetxController {
       }
 
       markers.refresh();
-      print("Loaded markers: ${markers.length}");
-
+      print("[Dashboard] Loaded safety markers: ${points.length}");
     } catch (e) {
-      print("Error loading safety points: $e");
+      print("[Dashboard] Error loading safety points: $e");
     }
   }
 
   Future<void> loadSosPointsFromApi() async {
     try {
       final uri = Uri.parse(ApiEndpoints.authEndpoints.loadSosPoints);
-
       final res = await http.get(uri);
 
       if (res.statusCode != 200) {
-        print("Failed to load SOS points: ${res.statusCode} ${res.body}");
+        print("[Dashboard] Failed to load SOS points: ${res.statusCode} ${res.body}");
         return;
       }
 
@@ -184,9 +272,6 @@ class DashboardController extends GetxController {
       final points = arr.map((e) => SosPoint.fromJson(e)).toList();
 
       for (final p in points) {
-        // Optional: only show ACTIVE SOS
-        // if (p.status.toUpperCase() != "ACTIVE") continue;
-
         final hue = _riskHue(p.riskLevel);
 
         markers.add(
@@ -203,9 +288,31 @@ class DashboardController extends GetxController {
       }
 
       markers.refresh();
-      print("Loaded SOS markers: ${points.length}");
+      print("[Dashboard] Loaded SOS markers: ${points.length}");
     } catch (e) {
-      print("Error loading SOS points: $e");
+      print("[Dashboard] Error loading SOS points: $e");
+    }
+  }
+
+  Future<void> fetchNotifications(String district) async {
+    List<Map<String, dynamic>> notifications = [];
+    try {
+      final response = await http.get(
+        Uri.parse(
+          '${ApiEndpoints.authEndpoints.getNotifications}/$district',
+        ),
+      );
+
+      print("District: $district");
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = json.decode(response.body);
+        notifications = data.map((e) => Map<String, dynamic>.from(e)).toList();
+      } else {
+        print("Failed to load notifications");
+      }
+    } catch (e) {
+      print("Error fetching notifications: $e");
     }
   }
 
@@ -222,13 +329,17 @@ class DashboardController extends GetxController {
     }
   }
 
-  /// ➕ Zoom in
   void zoomIn() {
     mapController.animateCamera(CameraUpdate.zoomIn());
   }
 
-  /// ➖ Zoom out
   void zoomOut() {
     mapController.animateCamera(CameraUpdate.zoomOut());
+  }
+
+  @override
+  void onClose() {
+    notificationsController?.dispose();
+    super.onClose();
   }
 }
