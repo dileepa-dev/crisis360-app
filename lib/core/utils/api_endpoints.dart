@@ -1,10 +1,12 @@
 import 'dart:io';
 
 class ApiEndpoints {
-  static final String baseUrl =
-  Platform.isAndroid
-      ? "http://10.0.2.2:8080"
-      : "http://172.20.10.2:8080";
+  // static final String baseUrl =
+  // Platform.isAndroid
+  //     ? "http://10.0.2.2:8080"
+  //     : "http://172.20.10.2:8080";
+
+  static final String baseUrl = "http://172.20.10.2:8080";
 
   static _AuthEndpoints authEndpoints = _AuthEndpoints();
 }

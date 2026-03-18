@@ -114,8 +114,8 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  void _showLogoutConfirmation(
-      BuildContext context, ProfileController controller) {
+  void _showLogoutConfirmation(BuildContext context,
+      ProfileController controller) {
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -143,107 +143,244 @@ class ProfilePage extends StatelessWidget {
     );
   }
 
-  void _showCreateUserDialog(BuildContext context, ProfileController controller) {
+  void _showCreateUserDialog(BuildContext context,
+      ProfileController controller) {
+    final nameController = TextEditingController();
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
 
-  }
-}
+    final RxString selectedProvince = ''.obs;
+    final RxString selectedDistrict = ''.obs;
 
-void _showSafetyDialog(
-    BuildContext context, ProfileController controller) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Create Admin User"),
+          content: SingleChildScrollView(
+            child: Obx(
+                  () =>
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      TextField(
+                        controller: nameController,
+                        decoration: const InputDecoration(
+                          labelText: "Name",
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
 
-  controller.selectedProvince.value = '';
-  controller.selectedDistrict.value = '';
+                      TextField(
+                        controller: emailController,
+                        decoration: const InputDecoration(
+                          labelText: "Email",
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
 
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) {
-      return AlertDialog(
-        title: const Text("Send Safety Confirmation"),
-        content: Obx(() => Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
+                      TextField(
+                        controller: passwordController,
+                        obscureText: true,
+                        decoration: const InputDecoration(
+                          labelText: "Password",
+                          border: OutlineInputBorder(),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
 
-            /// Province Dropdown
-            DropdownButtonFormField<String>(
-              value: controller.selectedProvince.value.isEmpty
-                  ? null
-                  : controller.selectedProvince.value,
-              decoration: const InputDecoration(
-                labelText: "Select Province",
-                border: OutlineInputBorder(),
-              ),
-              items: controller.provinces
-                  .map((province) => DropdownMenuItem(
-                value: province,
-                child: Text(province),
-              ))
-                  .toList(),
-              onChanged: (value) {
-                controller.selectedProvince.value = value!;
-                controller.selectedDistrict.value = '';
-              },
+                      DropdownButtonFormField<String>(
+                        value: selectedProvince.value.isEmpty
+                            ? null
+                            : selectedProvince.value,
+                        decoration: const InputDecoration(
+                          labelText: "Select Province",
+                          border: OutlineInputBorder(),
+                        ),
+                        items: controller.provinces
+                            .map(
+                              (province) =>
+                              DropdownMenuItem(
+                                value: province,
+                                child: Text(province),
+                              ),
+                        )
+                            .toList(),
+                        onChanged: (value) {
+                          selectedProvince.value = value!;
+                          selectedDistrict.value = '';
+                        },
+                      ),
+                      const SizedBox(height: 12),
+
+                      DropdownButtonFormField<String>(
+                        value: selectedDistrict.value.isEmpty
+                            ? null
+                            : selectedDistrict.value,
+                        decoration: const InputDecoration(
+                          labelText: "Select District",
+                          border: OutlineInputBorder(),
+                        ),
+                        items: selectedProvince.value.isEmpty
+                            ? []
+                            : controller
+                            .districtsByProvince[selectedProvince.value]!
+                            .map(
+                              (district) =>
+                              DropdownMenuItem(
+                                value: district,
+                                child: Text(district),
+                              ),
+                        )
+                            .toList(),
+                        onChanged: (value) {
+                          selectedDistrict.value = value!;
+                        },
+                      ),
+                    ],
+                  ),
             ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (nameController.text
+                    .trim()
+                    .isEmpty ||
+                    emailController.text
+                        .trim()
+                        .isEmpty ||
+                    passwordController.text
+                        .trim()
+                        .isEmpty ||
+                    selectedProvince.value.isEmpty ||
+                    selectedDistrict.value.isEmpty) {
+                  Get.snackbar("Error", "Please fill all fields");
+                  return;
+                }
 
-            const SizedBox(height: 15),
+                Navigator.pop(context);
 
-            /// District Dropdown
-            DropdownButtonFormField<String>(
-              value: controller.selectedDistrict.value.isEmpty
-                  ? null
-                  : controller.selectedDistrict.value,
-              decoration: const InputDecoration(
-                labelText: "Select District",
-                border: OutlineInputBorder(),
-              ),
-              items: controller.selectedProvince.value.isEmpty
-                  ? []
-                  : controller
-                  .districtsByProvince[
-              controller.selectedProvince.value]!
-                  .map((district) => DropdownMenuItem(
-                value: district,
-                child: Text(district),
-              ))
-                  .toList(),
-              onChanged: (value) {
-                controller.selectedDistrict.value = value!;
+                await controller.createAdminUser(
+                  name: nameController.text.trim(),
+                  email: emailController.text.trim(),
+                  password: passwordController.text.trim(),
+                  province: selectedProvince.value,
+                  district: selectedDistrict.value,
+                );
               },
+              child: const Text("Create Admin"),
             ),
           ],
-        )),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
+        );
+      },
+    );
+  }
 
-              if (controller.selectedProvince.value.isEmpty ||
-                  controller.selectedDistrict.value.isEmpty) {
-                Get.snackbar("Error", "Please select province and district");
-                return;
-              }
+  void _showSafetyDialog(BuildContext context, ProfileController controller) {
+    controller.selectedProvince.value = '';
+    controller.selectedDistrict.value = '';
 
-              Navigator.pop(context);
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Send Safety Confirmation"),
+          content: Obx(() =>
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
 
-              await controller.sendSafetyNotification(
-                controller.selectedProvince.value,
-                controller.selectedDistrict.value,
-              );
+                  /// Province Dropdown
+                  DropdownButtonFormField<String>(
+                    value: controller.selectedProvince.value.isEmpty
+                        ? null
+                        : controller.selectedProvince.value,
+                    decoration: const InputDecoration(
+                      labelText: "Select Province",
+                      border: OutlineInputBorder(),
+                    ),
+                    items: controller.provinces
+                        .map((province) =>
+                        DropdownMenuItem(
+                          value: province,
+                          child: Text(province),
+                        ))
+                        .toList(),
+                    onChanged: (value) {
+                      controller.selectedProvince.value = value!;
+                      controller.selectedDistrict.value = '';
+                    },
+                  ),
 
-              Get.snackbar(
-                "Success",
-                "Safety notification sent successfully",
-                backgroundColor: Colors.green,
-                colorText: Colors.white,
-              );
-            },
-            child: const Text("Send"),
-          ),
-        ],
-      );
-    },
-  );
+                  const SizedBox(height: 15),
+
+                  /// District Dropdown
+                  DropdownButtonFormField<String>(
+                    value: controller.selectedDistrict.value.isEmpty
+                        ? null
+                        : controller.selectedDistrict.value,
+                    decoration: const InputDecoration(
+                      labelText: "Select District",
+                      border: OutlineInputBorder(),
+                    ),
+                    items: controller.selectedProvince.value.isEmpty
+                        ? []
+                        : controller
+                        .districtsByProvince[
+                    controller.selectedProvince.value]!
+                        .map((district) =>
+                        DropdownMenuItem(
+                          value: district,
+                          child: Text(district),
+                        ))
+                        .toList(),
+                    onChanged: (value) {
+                      controller.selectedDistrict.value = value!;
+                    },
+                  ),
+                ],
+              )),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                if (controller.selectedProvince.value.isEmpty ||
+                    controller.selectedDistrict.value.isEmpty) {
+                  Get.snackbar("Error", "Please select province and district");
+                  return;
+                }
+
+                Navigator.pop(context);
+
+                await controller.sendSafetyNotification(
+                  controller.selectedProvince.value,
+                  controller.selectedDistrict.value,
+                );
+
+                Get.snackbar(
+                  "Success",
+                  "Safety notification sent successfully",
+                  backgroundColor: Colors.green,
+                  colorText: Colors.white,
+                );
+              },
+              child: const Text("Send"),
+            ),
+          ],
+        );
+      },
+    );
+  }
 }

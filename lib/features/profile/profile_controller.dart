@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:crisis360app/core/utils/api_endpoints.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:get/get.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -41,6 +42,8 @@ class ProfileController extends GetxController {
     "Uva": ["Badulla", "Monaragala"],
     "Sabaragamuwa": ["Ratnapura", "Kegalle"],
   };
+
+  final roles = ["ADMIN"];
 
   @override
   void onInit() {
@@ -106,6 +109,109 @@ class ProfileController extends GetxController {
     } catch (e) {
       Get.snackbar("Error", "Failed to send safety notification");
     } finally {
+      isLoading.value = false;
+    }
+  }
+
+  Future<void> createAdminFirestoreUser({
+    required String uid,
+    required String name,
+    required String email,
+    required String province,
+    required String district,
+  }) async {
+    await _firestore.collection('users').doc(uid).set({
+      'name': name,
+      'email': email,
+      'province': province,
+      'district': district,
+      'createdAt': FieldValue.serverTimestamp(),
+      'role': 'ADMIN',
+    });
+  }
+
+  Future<void> createAdminUser({
+    required String name,
+    required String email,
+    required String password,
+    required String province,
+    required String district,
+  }) async {
+    FirebaseApp? secondaryApp;
+
+    try {
+      isLoading.value = true;
+
+      print("STEP 1: Initializing secondary app");
+      secondaryApp = await Firebase.initializeApp(
+        name: 'SecondaryApp_${DateTime.now().millisecondsSinceEpoch}',
+        options: Firebase.app().options,
+      );
+
+      final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
+
+      print("STEP 2: Creating auth user");
+      final UserCredential userCredential =
+      await secondaryAuth.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+
+      final User? newUser = userCredential.user;
+
+      if (newUser == null) {
+        throw Exception("Admin creation failed: user is null");
+      }
+
+      print("STEP 3: Auth user created with uid = ${newUser.uid}");
+
+      print("STEP 4: Saving user to Firestore");
+      await createAdminFirestoreUser(
+        uid: newUser.uid,
+        name: name,
+        email: email,
+        province: province,
+        district: district,
+      );
+
+      print("STEP 5: Firestore save success");
+
+      Get.snackbar(
+        "Success",
+        "Admin user created successfully",
+        backgroundColor: Colors.green,
+        colorText: Colors.white,
+      );
+
+      await secondaryAuth.signOut();
+    } on FirebaseAuthException catch (e) {
+      print("FIREBASE AUTH ERROR: ${e.code} - ${e.message}");
+      Get.snackbar(
+        "Error",
+        e.message ?? "Failed to create admin user",
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } on FirebaseException catch (e) {
+      print("FIRESTORE ERROR: ${e.code} - ${e.message}");
+      Get.snackbar(
+        "Error",
+        e.message ?? "Firestore write failed",
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } catch (e) {
+      print("GENERAL ERROR: $e");
+      Get.snackbar(
+        "Error",
+        e.toString(),
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
+    } finally {
+      if (secondaryApp != null) {
+        await secondaryApp.delete();
+      }
       isLoading.value = false;
     }
   }
