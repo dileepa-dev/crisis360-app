@@ -2,12 +2,12 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:get/get.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
 import 'package:location/location.dart';
 
+import '../../core/services/notification_service.dart';
 import '../../core/services/pushNotificationService.dart';
 import '../../core/utils/api_endpoints.dart';
 import '../../models/SafetyPoint.dart';
@@ -19,7 +19,7 @@ class DashboardController extends GetxController {
   final RxString district = ''.obs;
   final RxString province = ''.obs;
   final RxBool isLoading = true.obs;
-  final userRole = ''.obs;
+  final RxString userRole = ''.obs;
 
   late GoogleMapController mapController;
 
@@ -43,11 +43,6 @@ class DashboardController extends GetxController {
 
   Future<void> initializeDashboard() async {
     try {
-      await FirebaseMessaging.instance.requestPermission();
-
-      final token = await FirebaseMessaging.instance.getToken();
-      print("[Dashboard] FCM TOKEN: $token");
-
       await fetchUserData();
 
       await _registerFcmTokenIfPossible();
@@ -60,8 +55,11 @@ class DashboardController extends GetxController {
         district: district,
       );
 
-      // await notificationsController?.fetchNotifications();
-      await fetchNotifications(district as String);
+      if (district.value.isNotEmpty) {
+        await fetchNotifications(district.value);
+      } else {
+        print("[Dashboard] Notifications skipped: district is empty");
+      }
     } catch (e) {
       print("[Dashboard] initializeDashboard error: $e");
     } finally {
@@ -138,14 +136,18 @@ class DashboardController extends GetxController {
 
       if (safeProvince == null || safeDistrict == null) {
         print("[Dashboard] save-token skipped: province/district invalid");
-        print("[Dashboard] province=${province.value}, district=${district.value}");
+        print(
+          "[Dashboard] province=${province.value}, district=${district.value}",
+        );
         return;
       }
 
-      final token = await FirebaseMessaging.instance.getToken();
+      final token = await NotificationService.instance.getAndroidFcmTokenOrNull();
 
       if (token == null || token.trim().isEmpty) {
-        print("[Dashboard] save-token skipped: FCM token is null/empty");
+        print(
+          "[Dashboard] save-token skipped: non-Android platform or FCM token unavailable",
+        );
         return;
       }
 
@@ -208,6 +210,8 @@ class DashboardController extends GetxController {
 
       currentLocation.value = LatLng(loc.latitude!, loc.longitude!);
 
+      markers.removeWhere((m) => m.markerId.value == 'me');
+
       markers.add(
         Marker(
           markerId: const MarkerId('me'),
@@ -218,6 +222,8 @@ class DashboardController extends GetxController {
           ),
         ),
       );
+
+      markers.refresh();
     } catch (e) {
       print('[Dashboard] Location error: $e');
     }
@@ -229,7 +235,9 @@ class DashboardController extends GetxController {
       final res = await http.get(uri);
 
       if (res.statusCode != 200) {
-        print("[Dashboard] Failed to load safety points: ${res.statusCode} ${res.body}");
+        print(
+          "[Dashboard] Failed to load safety points: ${res.statusCode} ${res.body}",
+        );
         return;
       }
 
@@ -264,7 +272,9 @@ class DashboardController extends GetxController {
       final res = await http.get(uri);
 
       if (res.statusCode != 200) {
-        print("[Dashboard] Failed to load SOS points: ${res.statusCode} ${res.body}");
+        print(
+          "[Dashboard] Failed to load SOS points: ${res.statusCode} ${res.body}",
+        );
         return;
       }
 
@@ -294,25 +304,38 @@ class DashboardController extends GetxController {
     }
   }
 
-  Future<void> fetchNotifications(String district) async {
-    List<Map<String, dynamic>> notifications = [];
+  Future<void> fetchNotifications(String districtName) async {
     try {
+      if (districtName.trim().isEmpty) {
+        print("[Dashboard] fetchNotifications skipped: district is empty");
+        return;
+      }
+
       final response = await http.get(
         Uri.parse(
-          '${ApiEndpoints.authEndpoints.getNotifications}/$district',
+          '${ApiEndpoints.authEndpoints.getNotifications}/$districtName',
         ),
       );
 
-      print("District: $district");
+      print("[Dashboard] District: $districtName");
+      print("[Dashboard] Notifications status: ${response.statusCode}");
+      print("[Dashboard] Notifications body: ${response.body}");
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        notifications = data.map((e) => Map<String, dynamic>.from(e)).toList();
+        final notifications =
+        data.map((e) => Map<String, dynamic>.from(e)).toList();
+
+        print(
+          "[Dashboard] Notifications loaded successfully: ${notifications.length}",
+        );
       } else {
-        print("Failed to load notifications");
+        print(
+          "[Dashboard] Failed to load notifications: ${response.statusCode}",
+        );
       }
     } catch (e) {
-      print("Error fetching notifications: $e");
+      print("[Dashboard] Error fetching notifications: $e");
     }
   }
 

@@ -1,19 +1,23 @@
 import 'dart:async';
 import 'dart:convert';
+
 import 'package:crisis360app/core/utils/api_endpoints.dart';
+import 'package:delightful_toast/delight_toast.dart';
+import 'package:delightful_toast/toast/components/toast_card.dart';
+import 'package:delightful_toast/toast/utils/enums.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:get/get_rx/src/rx_types/rx_types.dart';
 import 'package:http/http.dart' as http;
-import 'package:delightful_toast/delight_toast.dart';
-import 'package:delightful_toast/toast/components/toast_card.dart';
-import 'package:delightful_toast/toast/utils/enums.dart';
 
 class NotificationsController extends ChangeNotifier {
   final RxString district;
+
   List<Map<String, dynamic>> notifications = [];
   bool isLoading = false;
+  bool _isFetching = false;
+
   Timer? _timer;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   String? userId;
@@ -36,17 +40,18 @@ class NotificationsController extends ChangeNotifier {
 
     if (user != null) {
       userId = user.uid;
-      print("Logged user ID: $userId");
+      debugPrint("Logged user ID: $userId");
     } else {
-      print("No logged user found");
+      debugPrint("No logged user found");
     }
   }
 
   Future<void> fetchNotifications() async {
-    if (_isDisposed) return;
+    if (_isDisposed || _isFetching) return;
 
+    _isFetching = true;
     isLoading = true;
-    if (!_isDisposed) notifyListeners();
+    _safeNotify();
 
     try {
       final response = await http.get(
@@ -57,23 +62,27 @@ class NotificationsController extends ChangeNotifier {
 
       if (_isDisposed) return;
 
-      print("District: ${district.value}");
+      debugPrint("District: ${district.value}");
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        notifications = data.map((e) => Map<String, dynamic>.from(e)).toList();
+        notifications = data
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
       } else {
-        print("Failed to load notifications");
+        debugPrint("Failed to load notifications: ${response.statusCode}");
       }
     } catch (e) {
       if (!_isDisposed) {
-        print("Error fetching notifications: $e");
+        debugPrint("Error fetching notifications: $e");
       }
     } finally {
+      _isFetching = false;
+
       if (_isDisposed) return;
 
       isLoading = false;
-      if (!_isDisposed) notifyListeners();
+      _safeNotify();
     }
   }
 
@@ -88,6 +97,7 @@ class NotificationsController extends ChangeNotifier {
 
     String? isSafeError;
     String? needHelpError;
+    bool isSubmitting = false;
 
     showModalBottomSheet(
       context: parentContext,
@@ -99,23 +109,32 @@ class NotificationsController extends ChangeNotifier {
         return StatefulBuilder(
           builder: (sheetContext, setState) {
             Future<void> validateAndSubmit() async {
+              if (isSubmitting) return;
+
               final isFormValid = formKey.currentState?.validate() ?? false;
 
               isSafeError = (isSafe == null) ? "Please select Yes or No" : null;
-              needHelpError = (needHelp == null) ? "Please select Yes or No" : null;
+              needHelpError =
+              (needHelp == null) ? "Please select Yes or No" : null;
 
               setState(() {});
 
               if (!isFormValid || isSafeError != null || needHelpError != null) {
                 ScaffoldMessenger.of(sheetContext).showSnackBar(
-                  const SnackBar(content: Text("Please fill all required fields")),
+                  const SnackBar(
+                    content: Text("Please fill all required fields"),
+                  ),
                 );
                 return;
               }
 
               final notificationId = notif['id']?.toString() ?? '';
 
-              await submitSafetyStatus(
+              setState(() {
+                isSubmitting = true;
+              });
+
+              final success = await submitSafetyStatus(
                 sheetContext,
                 messageController.text.trim(),
                 notificationId,
@@ -125,7 +144,13 @@ class NotificationsController extends ChangeNotifier {
                 severityLevel,
               );
 
-              if (Navigator.of(sheetContext).canPop()) {
+              if (sheetContext.mounted) {
+                setState(() {
+                  isSubmitting = false;
+                });
+              }
+
+              if (success && sheetContext.mounted) {
                 Navigator.of(sheetContext).pop();
               }
             }
@@ -142,11 +167,15 @@ class NotificationsController extends ChangeNotifier {
                   key: formKey,
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
                       const Center(
                         child: Text(
                           "Safety Confirmation",
-                          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 20),
@@ -155,23 +184,23 @@ class NotificationsController extends ChangeNotifier {
                       Row(
                         children: [
                           Expanded(
-                            child: RadioListTile(
+                            child: RadioListTile<String>(
                               title: const Text("Yes"),
                               value: "YES",
                               groupValue: isSafe,
                               onChanged: (value) => setState(() {
-                                isSafe = value.toString();
+                                isSafe = value;
                                 isSafeError = null;
                               }),
                             ),
                           ),
                           Expanded(
-                            child: RadioListTile(
+                            child: RadioListTile<String>(
                               title: const Text("No"),
                               value: "NO",
                               groupValue: isSafe,
                               onChanged: (value) => setState(() {
-                                isSafe = value.toString();
+                                isSafe = value;
                                 isSafeError = null;
                               }),
                             ),
@@ -183,7 +212,10 @@ class NotificationsController extends ChangeNotifier {
                           padding: const EdgeInsets.only(left: 12, bottom: 8),
                           child: Text(
                             isSafeError!,
-                            style: const TextStyle(color: Colors.red, fontSize: 12),
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
 
@@ -198,9 +230,15 @@ class NotificationsController extends ChangeNotifier {
                           DropdownMenuItem(value: "10+", child: Text("10+")),
                         ],
                         onChanged: (value) => setState(() => peopleCount = value),
-                        decoration: const InputDecoration(border: OutlineInputBorder()),
-                        validator: (value) =>
-                        (value == null || value.isEmpty) ? "Please select people count" : null,
+                        decoration: const InputDecoration(
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (value == null || value.isEmpty) {
+                            return "Please select people count";
+                          }
+                          return null;
+                        },
                       ),
 
                       const SizedBox(height: 15),
@@ -208,23 +246,23 @@ class NotificationsController extends ChangeNotifier {
                       Row(
                         children: [
                           Expanded(
-                            child: RadioListTile(
+                            child: RadioListTile<String>(
                               title: const Text("Yes"),
                               value: "YES",
                               groupValue: needHelp,
                               onChanged: (value) => setState(() {
-                                needHelp = value.toString();
+                                needHelp = value;
                                 needHelpError = null;
                               }),
                             ),
                           ),
                           Expanded(
-                            child: RadioListTile(
+                            child: RadioListTile<String>(
                               title: const Text("No"),
                               value: "NO",
                               groupValue: needHelp,
                               onChanged: (value) => setState(() {
-                                needHelp = value.toString();
+                                needHelp = value;
                                 needHelpError = null;
                               }),
                             ),
@@ -236,7 +274,10 @@ class NotificationsController extends ChangeNotifier {
                           padding: const EdgeInsets.only(left: 12, bottom: 8),
                           child: Text(
                             needHelpError!,
-                            style: const TextStyle(color: Colors.red, fontSize: 12),
+                            style: const TextStyle(
+                              color: Colors.red,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
 
@@ -247,8 +288,9 @@ class NotificationsController extends ChangeNotifier {
                         min: 1,
                         max: 5,
                         divisions: 4,
-                        label: severityLevel.toString(),
-                        onChanged: (value) => setState(() => severityLevel = value),
+                        label: severityLevel.toStringAsFixed(0),
+                        onChanged: (value) =>
+                            setState(() => severityLevel = value),
                       ),
 
                       const SizedBox(height: 15),
@@ -263,7 +305,9 @@ class NotificationsController extends ChangeNotifier {
                         validator: (value) {
                           final text = value?.trim() ?? "";
                           if (text.isEmpty) return "Message cannot be empty";
-                          if (text.length < 5) return "Please enter at least 5 characters";
+                          if (text.length < 5) {
+                            return "Please enter at least 5 characters";
+                          }
                           return null;
                         },
                       ),
@@ -273,8 +317,10 @@ class NotificationsController extends ChangeNotifier {
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size(double.infinity, 50),
                         ),
-                        onPressed: validateAndSubmit,
-                        child: const Text("Submit"),
+                        onPressed: isSubmitting ? null : validateAndSubmit,
+                        child: Text(
+                          isSubmitting ? "Submitting..." : "Submit",
+                        ),
                       ),
                     ],
                   ),
@@ -284,10 +330,12 @@ class NotificationsController extends ChangeNotifier {
           },
         );
       },
-    );
+    ).whenComplete(() {
+      messageController.dispose();
+    });
   }
 
-  Future<void> submitSafetyStatus(
+  Future<bool> submitSafetyStatus(
       BuildContext context,
       String message,
       String notificationId,
@@ -318,21 +366,27 @@ class NotificationsController extends ChangeNotifier {
         }),
       );
 
-      if (Navigator.of(context, rootNavigator: true).canPop()) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
+      _closeLoader(context);
 
-      if (response.statusCode == 200) {
-        _showSnackbar(context, "Safety status submitted successfully ✅", Colors.green);
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        _showSnackbar(
+          context,
+          "Safety status submitted successfully ✅",
+          Colors.green,
+        );
+        return true;
       } else {
-        _showSnackbar(context, "Submission failed ❌", Colors.red);
+        _showSnackbar(
+          context,
+          "Submission failed ❌ (${response.statusCode})",
+          Colors.red,
+        );
+        return false;
       }
     } catch (e) {
-      if (Navigator.of(context, rootNavigator: true).canPop()) {
-        Navigator.of(context, rootNavigator: true).pop();
-      }
-
+      _closeLoader(context);
       _showSnackbar(context, "Error: ${e.toString()} ❌", Colors.red);
+      return false;
     }
   }
 
@@ -348,15 +402,32 @@ class NotificationsController extends ChangeNotifier {
     );
   }
 
+  void _closeLoader(BuildContext context) {
+    if (Navigator.of(context, rootNavigator: true).canPop()) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
+
   Future<Position> getUserLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
-      throw Exception("Location disabled");
+      throw Exception("Location services are disabled");
     }
 
     LocationPermission permission = await Geolocator.checkPermission();
+
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
+    }
+
+    if (permission == LocationPermission.denied) {
+      throw Exception("Location permission denied");
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      throw Exception(
+        "Location permission permanently denied. Please enable it from settings",
+      );
     }
 
     return await Geolocator.getCurrentPosition(
@@ -383,6 +454,12 @@ class NotificationsController extends ChangeNotifier {
       position: DelightSnackbarPosition.top,
       autoDismiss: true,
     ).show(context);
+  }
+
+  void _safeNotify() {
+    if (!_isDisposed) {
+      notifyListeners();
+    }
   }
 
   @override

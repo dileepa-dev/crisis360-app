@@ -1,10 +1,11 @@
-import 'dart:convert';
 import 'dart:async';
+import 'dart:convert';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:http/http.dart' as http;
 
+import '../../core/services/notification_service.dart';
 import '../../core/utils/api_endpoints.dart';
 
 class LoginController {
@@ -62,7 +63,7 @@ class LoginController {
       await registerFcmToken(province, district)
           .timeout(const Duration(seconds: 15));
 
-      print("🟢 [LOGIN] Step 3 OK: token registered");
+      print("🟢 [LOGIN] Step 3 OK");
     } on TimeoutException catch (e) {
       errorMessage = "Request timed out. Check internet connection.";
       print("🔴 [LOGIN] TIMEOUT: $e");
@@ -87,14 +88,16 @@ class LoginController {
       throw Exception("Province or district is invalid while registering token");
     }
 
-    final token = await FirebaseMessaging.instance.getToken();
+    final token = await NotificationService.instance.getAndroidFcmTokenOrNull();
 
     if (token == null || token.trim().isEmpty) {
-      throw Exception("FCM token is null or empty");
+      print("🟡 [FCM] Skipping token save because platform is not Android or token is unavailable");
+      return;
     }
 
     print("🟡 [FCM] Saving token to backend");
     print("🟡 [FCM] province=$normalizedProvince district=$normalizedDistrict");
+    print("🟡 [FCM] token=$token");
 
     final response = await http.post(
       Uri.parse(ApiEndpoints.authEndpoints.saveToken),
@@ -110,7 +113,9 @@ class LoginController {
     print("🟡 [FCM] save-token body: ${response.body}");
 
     if (response.statusCode != 200) {
-      throw Exception("Failed to save token: ${response.statusCode} ${response.body}");
+      throw Exception(
+        "Failed to save token: ${response.statusCode} ${response.body}",
+      );
     }
   }
 

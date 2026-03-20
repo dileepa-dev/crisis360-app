@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -11,6 +13,8 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
   FlutterLocalNotificationsPlugin();
 
+  final FirebaseMessaging _messaging = FirebaseMessaging.instance;
+
   static const AndroidNotificationChannel highImportanceChannel =
   AndroidNotificationChannel(
     'high_importance_channel',
@@ -19,32 +23,33 @@ class NotificationService {
     importance: Importance.max,
   );
 
+  bool _listenersInitialized = false;
+
   Future<void> initLocalNotifications() async {
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-        AndroidFlutterLocalNotificationsPlugin
-    >()
-        ?.createNotificationChannel(highImportanceChannel);
+    final androidPlugin =
+    flutterLocalNotificationsPlugin.resolvePlatformSpecificImplementation<
+        AndroidFlutterLocalNotificationsPlugin>();
 
-    const AndroidInitializationSettings androidInitializationSettings =
-    AndroidInitializationSettings('@mipmap/ic_launcher');
+    await androidPlugin?.createNotificationChannel(highImportanceChannel);
 
-    const DarwinInitializationSettings iosInitializationSettings =
-    DarwinInitializationSettings();
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const iosInit = DarwinInitializationSettings();
 
-    const InitializationSettings initializationSettings =
-    InitializationSettings(
-      android: androidInitializationSettings,
-      iOS: iosInitializationSettings,
+    const initSettings = InitializationSettings(
+      android: androidInit,
+      iOS: iosInit,
     );
 
-    await flutterLocalNotificationsPlugin.initialize(settings: initializationSettings);
+    await flutterLocalNotificationsPlugin.initialize(
+      settings: initSettings,
+      onDidReceiveNotificationResponse: (details) async {
+        debugPrint("Local notification tapped");
+      },
+    );
   }
 
   Future<void> requestNotificationPermission() async {
-    FirebaseMessaging messaging = FirebaseMessaging.instance;
-
-    NotificationSettings settings = await messaging.requestPermission(
+    final settings = await _messaging.requestPermission(
       alert: true,
       badge: true,
       sound: true,
@@ -53,8 +58,25 @@ class NotificationService {
 
     debugPrint("Permission: ${settings.authorizationStatus}");
 
-    final token = await messaging.getToken();
-    debugPrint("FCM TOKEN: $token");
+    // Only continue token flow on Android
+    if (!kIsWeb && Platform.isAndroid) {
+      final token = await _messaging.getToken();
+      debugPrint("ANDROID FCM TOKEN: $token");
+    } else {
+      debugPrint("Skipping FCM token fetch on non-Android platform");
+    }
+  }
+
+  Future<String?> getAndroidFcmTokenOrNull() async {
+    if (kIsWeb) return null;
+    if (!Platform.isAndroid) return null;
+
+    try {
+      return await _messaging.getToken();
+    } catch (e) {
+      debugPrint("Error getting Android FCM token: $e");
+      return null;
+    }
   }
 
   Future<void> showLocalNotification(RemoteMessage message) async {
@@ -87,47 +109,55 @@ class NotificationService {
   }
 
   Future<void> setupFCMListeners() async {
-    RemoteMessage? initialMessage =
-    await FirebaseMessaging.instance.getInitialMessage();
+    if (_listenersInitialized) return;
+    _listenersInitialized = true;
+
+    final initialMessage = await _messaging.getInitialMessage();
 
     if (initialMessage != null) {
-      debugPrint("App opened from terminated state");
-      debugPrint("Initial message data: ${initialMessage.data}");
-
       Future.delayed(const Duration(milliseconds: 500), () {
-        handleIncomingMessage(initialMessage);
+        _handleMessageRouting(initialMessage, fromUserTap: true);
       });
     }
 
-    FirebaseMessaging.onMessage.listen((RemoteMessage message) async {
+    FirebaseMessaging.onMessage.listen((message) async {
       debugPrint("Foreground notification received");
-      debugPrint("Message ID: ${message.messageId}");
       debugPrint("Message data: ${message.data}");
-      debugPrint("Message title: ${message.notification?.title}");
-      debugPrint("Message body: ${message.notification?.body}");
 
       await showLocalNotification(message);
-      handleSafetyMessage(message);
+      _handleSafetyMessage(message);
     });
 
-    FirebaseMessaging.onMessageOpenedApp.listen((RemoteMessage message) {
+    FirebaseMessaging.onMessageOpenedApp.listen((message) {
       debugPrint("Notification tapped from background");
-      debugPrint("Opened message data: ${message.data}");
-
-      handleSafetyMessage(message);
-      handleIncomingMessage(message);
+      _handleMessageRouting(message, fromUserTap: true);
     });
   }
 
-  void handleSafetyMessage(RemoteMessage message) {
+  void _handleMessageRouting(
+      RemoteMessage message, {
+        bool fromUserTap = false,
+      }) {
     final String? type = message.data['type'];
     final String? title = message.data['title'] ?? message.notification?.title;
-    final String? body = message.data['body'] ?? message.notification?.body;
 
-    debugPrint("handleSafetyMessage called");
-    debugPrint("type: $type");
-    debugPrint("title: $title");
-    debugPrint("body: $body");
+    final bool isSafety =
+        type == "SAFETY_CHECK" ||
+            title == "Safety Confirmation Required" ||
+            title == "Safety Confirmation" ||
+            title == "SAFETY_CHECK";
+
+    if (isSafety) {
+      _handleSafetyMessage(message);
+    } else if (fromUserTap) {
+      handleIncomingMessage(message);
+    }
+  }
+
+  void _handleSafetyMessage(RemoteMessage message) {
+    final String? title = message.data['title'] ?? message.notification?.title;
+    final String? body = message.data['body'] ?? message.notification?.body;
+    final String? type = message.data['type'];
 
     final bool shouldShowDialog =
         type == "SAFETY_CHECK" ||
@@ -135,26 +165,26 @@ class NotificationService {
             title == "Safety Confirmation" ||
             title == "SAFETY_CHECK";
 
-    if (shouldShowDialog) {
-      Future.delayed(const Duration(milliseconds: 300), () {
-        if (Get.isDialogOpen ?? false) return;
+    if (!shouldShowDialog) return;
 
-        Get.defaultDialog(
-          title: title ?? "Safety Confirmation",
-          middleText: body ?? "Are you safe?",
-          textConfirm: "Yes",
-          textCancel: "No",
-          confirmTextColor: Colors.white,
-          onConfirm: () {
-            Get.back();
-            debugPrint("User clicked YES");
-          },
-          onCancel: () {
-            debugPrint("User clicked NO");
-          },
-        );
-      });
-    }
+    Future.delayed(const Duration(milliseconds: 300), () {
+      if (Get.isDialogOpen ?? false) return;
+
+      Get.defaultDialog(
+        title: title ?? "Safety Confirmation",
+        middleText: body ?? "Are you safe?",
+        textConfirm: "Yes",
+        textCancel: "No",
+        confirmTextColor: Colors.white,
+        onConfirm: () {
+          Get.back();
+          debugPrint("User clicked YES");
+        },
+        onCancel: () {
+          debugPrint("User clicked NO");
+        },
+      );
+    });
   }
 
   void handleIncomingMessage(RemoteMessage message) {
@@ -168,10 +198,6 @@ class NotificationService {
             message.data['body'] ??
             "You have received a new message.";
 
-    debugPrint("Showing dialog");
-    debugPrint("Title: $title");
-    debugPrint("Body: $body");
-
     Future.delayed(const Duration(milliseconds: 300), () {
       if (Get.isDialogOpen ?? false) return;
 
@@ -180,9 +206,7 @@ class NotificationService {
         middleText: body,
         textConfirm: "OK",
         confirmTextColor: Colors.white,
-        onConfirm: () {
-          Get.back();
-        },
+        onConfirm: () => Get.back(),
       );
     });
   }
