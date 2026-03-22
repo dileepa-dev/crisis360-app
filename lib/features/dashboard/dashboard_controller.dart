@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:http/http.dart' as http;
@@ -19,6 +20,7 @@ class DashboardController extends GetxController {
   final RxString district = ''.obs;
   final RxString province = ''.obs;
   final RxBool isLoading = true.obs;
+  final RxBool isRefreshing = false.obs;
   final RxString userRole = ''.obs;
 
   late GoogleMapController mapController;
@@ -44,9 +46,7 @@ class DashboardController extends GetxController {
   Future<void> initializeDashboard() async {
     try {
       await fetchUserData();
-
       await _registerFcmTokenIfPossible();
-
       await initLocation();
       await loadSafetyPointsFromApi();
       await loadSosPointsFromApi();
@@ -64,6 +64,44 @@ class DashboardController extends GetxController {
       print("[Dashboard] initializeDashboard error: $e");
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  Future<void> refreshMapPoints() async {
+    if (isRefreshing.value) return;
+
+    try {
+      isRefreshing.value = true;
+
+      await initLocation();
+      await loadSafetyPointsFromApi();
+      await loadSosPointsFromApi();
+
+      if (district.value.isNotEmpty) {
+        await fetchNotifications(district.value);
+      }
+
+      Get.snackbar(
+        "Success",
+        "Map points refreshed successfully",
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.green.shade600,
+        colorText: Colors.white,
+        margin: const EdgeInsets.all(12),
+        duration: const Duration(seconds: 2),
+      );
+    } catch (e) {
+      print("[Dashboard] refreshMapPoints error: $e");
+      Get.snackbar(
+        "Error",
+        "Failed to refresh map points",
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.red.shade600,
+        colorText: Colors.white,
+        margin: const EdgeInsets.all(12),
+      );
+    } finally {
+      isRefreshing.value = false;
     }
   }
 
@@ -136,18 +174,14 @@ class DashboardController extends GetxController {
 
       if (safeProvince == null || safeDistrict == null) {
         print("[Dashboard] save-token skipped: province/district invalid");
-        print(
-          "[Dashboard] province=${province.value}, district=${district.value}",
-        );
+        print("[Dashboard] province=${province.value}, district=${district.value}");
         return;
       }
 
       final token = await NotificationService.instance.getAndroidFcmTokenOrNull();
 
       if (token == null || token.trim().isEmpty) {
-        print(
-          "[Dashboard] save-token skipped: non-Android platform or FCM token unavailable",
-        );
+        print("[Dashboard] save-token skipped: non-Android platform or FCM token unavailable");
         return;
       }
 
@@ -235,9 +269,7 @@ class DashboardController extends GetxController {
       final res = await http.get(uri);
 
       if (res.statusCode != 200) {
-        print(
-          "[Dashboard] Failed to load safety points: ${res.statusCode} ${res.body}",
-        );
+        print("[Dashboard] Failed to load safety points: ${res.statusCode} ${res.body}");
         return;
       }
 
@@ -251,10 +283,13 @@ class DashboardController extends GetxController {
 
         markers.add(
           Marker(
-            markerId: MarkerId(p.id),
+            markerId: MarkerId("SAFE_${p.id}"),
             position: LatLng(p.latitude, p.longitude),
             icon: BitmapDescriptor.defaultMarkerWithHue(hue),
-            infoWindow: InfoWindow(title: 'Risk: ${p.riskLevel}'),
+            infoWindow: InfoWindow(
+              title: 'Risk: ${p.riskLevel}',
+              snippet: 'Safety point',
+            ),
           ),
         );
       }
@@ -272,9 +307,7 @@ class DashboardController extends GetxController {
       final res = await http.get(uri);
 
       if (res.statusCode != 200) {
-        print(
-          "[Dashboard] Failed to load SOS points: ${res.statusCode} ${res.body}",
-        );
+        print("[Dashboard] Failed to load SOS points: ${res.statusCode} ${res.body}");
         return;
       }
 
@@ -312,9 +345,7 @@ class DashboardController extends GetxController {
       }
 
       final response = await http.get(
-        Uri.parse(
-          '${ApiEndpoints.authEndpoints.getNotifications}/$districtName',
-        ),
+        Uri.parse('${ApiEndpoints.authEndpoints.getNotifications}/$districtName'),
       );
 
       print("[Dashboard] District: $districtName");
@@ -326,13 +357,9 @@ class DashboardController extends GetxController {
         final notifications =
         data.map((e) => Map<String, dynamic>.from(e)).toList();
 
-        print(
-          "[Dashboard] Notifications loaded successfully: ${notifications.length}",
-        );
+        print("[Dashboard] Notifications loaded successfully: ${notifications.length}");
       } else {
-        print(
-          "[Dashboard] Failed to load notifications: ${response.statusCode}",
-        );
+        print("[Dashboard] Failed to load notifications: ${response.statusCode}");
       }
     } catch (e) {
       print("[Dashboard] Error fetching notifications: $e");
@@ -344,12 +371,27 @@ class DashboardController extends GetxController {
       case 'HIGH':
         return BitmapDescriptor.hueRed;
       case 'MEDIUM':
-        return BitmapDescriptor.hueYellow;
+        return BitmapDescriptor.hueOrange;
       case 'LOW':
         return BitmapDescriptor.hueGreen;
       default:
         return BitmapDescriptor.hueAzure;
     }
+  }
+
+  Future<void> goToMyLocation() async {
+    if (currentLocation.value == null) {
+      await initLocation();
+    }
+
+    final location = currentLocation.value;
+    if (location == null) return;
+
+    mapController.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(target: location, zoom: 15),
+      ),
+    );
   }
 
   void zoomIn() {

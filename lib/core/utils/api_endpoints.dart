@@ -1,5 +1,3 @@
-import 'dart:io';
-
 class ApiEndpoints {
   // static final String baseUrl =
   // Platform.isAndroid
@@ -14,8 +12,7 @@ class ApiEndpoints {
 class _AuthEndpoints {
   final String saveToken = '${ApiEndpoints.baseUrl}/user/save-token';
   final String getNotifications = '${ApiEndpoints.baseUrl}/notifications';
-  final String sendSafety =
-      '${ApiEndpoints.baseUrl}/safety/send-safety-confirmation';
+  final String sendSafety = '${ApiEndpoints.baseUrl}/safety/send-safety-confirmation';
   final String submitSafetyStatus = '${ApiEndpoints.baseUrl}/safety/submit';
   final String sosRequest = '${ApiEndpoints.baseUrl}/sos';
   final String loadMapPoints = '${ApiEndpoints.baseUrl}/map/safety-points';
