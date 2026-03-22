@@ -234,18 +234,13 @@ class NotificationsController extends ChangeNotifier {
                                   const Expanded(
                                     child: Text(
                                       "Safety Confirmation",
+                                      textAlign: TextAlign.center,
                                       style: TextStyle(
                                         fontSize: 20,
                                         fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                   ),
-                                  // IconButton(
-                                  //   onPressed: isSubmitting
-                                  //       ? null
-                                  //       : () => Navigator.of(sheetContext).pop(),
-                                  //   icon: const Icon(Icons.close),
-                                  // ),
                                 ],
                               ),
                               const SizedBox(height: 8),
@@ -453,7 +448,7 @@ class NotificationsController extends ChangeNotifier {
                                 controller: messageController,
                                 maxLines: 4,
                                 decoration: _inputDecoration(
-                                  "Describe what is happening...",
+                                  "This will be ranked using AI...",
                                 ),
                                 validator: (value) {
                                   final text = value?.trim() ?? "";
@@ -610,22 +605,29 @@ class NotificationsController extends ChangeNotifier {
           margin: const EdgeInsets.all(12),
           duration: const Duration(seconds: 2),
         );
-        _showSnackbar(
-          context,
-          "Safety status submitted successfully ✅",
-          Colors.green,
-        );
         return true;
       } else {
-        _showSnackbar(
-          context,
-          "Submission failed ❌ (${response.statusCode})",
-          Colors.red,
+        Get.snackbar(
+          "Fail",
+          "Submission failed (${response.statusCode})",
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.red,
+          colorText: Colors.white,
+          margin: const EdgeInsets.all(12),
+          duration: const Duration(seconds: 2),
         );
         return false;
       }
     } catch (e) {
-      _showSnackbar(context, "Error: ${e.toString()} ❌", Colors.red);
+      Get.snackbar(
+        "Fail",
+        "Submission failed Error: ${e.toString()}",
+        snackPosition: SnackPosition.TOP,
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+        margin: const EdgeInsets.all(12),
+        duration: const Duration(seconds: 2),
+      );
       return false;
     }
   }

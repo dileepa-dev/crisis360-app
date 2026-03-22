@@ -1,21 +1,21 @@
 import 'dart:convert';
 
-import 'package:crisis360app/core/utils/api_endpoints.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:get/get.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:crisis360app/core/utils/api_endpoints.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:get/get.dart';
 import 'package:http/http.dart' as http;
 
 class ProfileController extends GetxController {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  var userName = ''.obs;
-  var email = ''.obs;
-  var role = ''.obs;
-  var isLoading = true.obs;
+  final userName = ''.obs;
+  final email = ''.obs;
+  final role = ''.obs;
+  final isLoading = true.obs;
   final selectedProvince = ''.obs;
   final selectedDistrict = ''.obs;
 
@@ -43,8 +43,6 @@ class ProfileController extends GetxController {
     "Sabaragamuwa": ["Ratnapura", "Kegalle"],
   };
 
-  final roles = ["ADMIN"];
-
   @override
   void onInit() {
     super.onInit();
@@ -56,13 +54,13 @@ class ProfileController extends GetxController {
       final user = _auth.currentUser;
 
       if (user == null) {
+        isLoading.value = false;
         return;
       }
 
       email.value = user.email ?? '';
 
-      final doc =
-      await _firestore.collection('users').doc(user.uid).get();
+      final doc = await _firestore.collection('users').doc(user.uid).get();
 
       if (doc.exists) {
         userName.value = doc.data()?['name'] ?? 'User';
@@ -88,7 +86,7 @@ class ProfileController extends GetxController {
     Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
   }
 
-  Future<void> sendSafetyNotification(String province, String district,) async {
+  Future<void> sendSafetyNotification(String province, String district) async {
     try {
       isLoading.value = true;
 
@@ -107,7 +105,12 @@ class ProfileController extends GetxController {
         throw Exception("Failed to send notification");
       }
     } catch (e) {
-      Get.snackbar("Error", "Failed to send safety notification");
+      Get.snackbar(
+        "Error",
+        "Failed to send safety notification",
+        backgroundColor: Colors.red,
+        colorText: Colors.white,
+      );
     } finally {
       isLoading.value = false;
     }
@@ -142,7 +145,6 @@ class ProfileController extends GetxController {
     try {
       isLoading.value = true;
 
-      print("STEP 1: Initializing secondary app");
       secondaryApp = await Firebase.initializeApp(
         name: 'SecondaryApp_${DateTime.now().millisecondsSinceEpoch}',
         options: Firebase.app().options,
@@ -150,22 +152,17 @@ class ProfileController extends GetxController {
 
       final secondaryAuth = FirebaseAuth.instanceFor(app: secondaryApp);
 
-      print("STEP 2: Creating auth user");
-      final UserCredential userCredential =
-      await secondaryAuth.createUserWithEmailAndPassword(
+      final userCredential = await secondaryAuth.createUserWithEmailAndPassword(
         email: email,
         password: password,
       );
 
-      final User? newUser = userCredential.user;
+      final newUser = userCredential.user;
 
       if (newUser == null) {
         throw Exception("Admin creation failed: user is null");
       }
 
-      print("STEP 3: Auth user created with uid = ${newUser.uid}");
-
-      print("STEP 4: Saving user to Firestore");
       await createAdminFirestoreUser(
         uid: newUser.uid,
         name: name,
@@ -173,8 +170,6 @@ class ProfileController extends GetxController {
         province: province,
         district: district,
       );
-
-      print("STEP 5: Firestore save success");
 
       Get.snackbar(
         "Success",
@@ -185,7 +180,6 @@ class ProfileController extends GetxController {
 
       await secondaryAuth.signOut();
     } on FirebaseAuthException catch (e) {
-      print("FIREBASE AUTH ERROR: ${e.code} - ${e.message}");
       Get.snackbar(
         "Error",
         e.message ?? "Failed to create admin user",
@@ -193,7 +187,6 @@ class ProfileController extends GetxController {
         colorText: Colors.white,
       );
     } on FirebaseException catch (e) {
-      print("FIRESTORE ERROR: ${e.code} - ${e.message}");
       Get.snackbar(
         "Error",
         e.message ?? "Firestore write failed",
@@ -201,7 +194,6 @@ class ProfileController extends GetxController {
         colorText: Colors.white,
       );
     } catch (e) {
-      print("GENERAL ERROR: $e");
       Get.snackbar(
         "Error",
         e.toString(),

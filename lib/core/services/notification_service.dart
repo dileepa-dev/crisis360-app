@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:get/get.dart';
 
+import '../../components/navbar/navigation_controller.dart';
+
 class NotificationService {
   NotificationService._();
 
@@ -58,7 +60,6 @@ class NotificationService {
 
     debugPrint("Permission: ${settings.authorizationStatus}");
 
-    // Only continue token flow on Android
     if (!kIsWeb && Platform.isAndroid) {
       final token = await _messaging.getToken();
       debugPrint("ANDROID FCM TOKEN: $token");
@@ -85,10 +86,9 @@ class NotificationService {
     final String title =
         notification?.title ?? message.data['title'] ?? "New Notification";
 
-    final String body =
-        notification?.body ??
-            message.data['body'] ??
-            "You have received a new message.";
+    final String body = notification?.body ??
+        message.data['body'] ??
+        "You have received a new message.";
 
     await flutterLocalNotificationsPlugin.show(
       id: message.hashCode,
@@ -141,11 +141,10 @@ class NotificationService {
     final String? type = message.data['type'];
     final String? title = message.data['title'] ?? message.notification?.title;
 
-    final bool isSafety =
-        type == "SAFETY_CHECK" ||
-            title == "Safety Confirmation Required" ||
-            title == "Safety Confirmation" ||
-            title == "SAFETY_CHECK";
+    final bool isSafety = type == "SAFETY_CHECK" ||
+        title == "Safety Confirmation Required" ||
+        title == "Safety Confirmation" ||
+        title == "SAFETY_CHECK";
 
     if (isSafety) {
       _handleSafetyMessage(message);
@@ -159,54 +158,274 @@ class NotificationService {
     final String? body = message.data['body'] ?? message.notification?.body;
     final String? type = message.data['type'];
 
-    final bool shouldShowDialog =
-        type == "SAFETY_CHECK" ||
-            title == "Safety Confirmation Required" ||
-            title == "Safety Confirmation" ||
-            title == "SAFETY_CHECK";
+    final bool shouldShowDialog = type == "SAFETY_CHECK" ||
+        title == "Safety Confirmation Required" ||
+        title == "Safety Confirmation" ||
+        title == "SAFETY_CHECK";
 
     if (!shouldShowDialog) return;
 
     Future.delayed(const Duration(milliseconds: 300), () {
       if (Get.isDialogOpen ?? false) return;
 
-      Get.defaultDialog(
-        title: title ?? "Safety Confirmation",
-        middleText: body ?? "Are you safe?",
-        textConfirm: "Yes",
-        textCancel: "No",
-        confirmTextColor: Colors.white,
-        onConfirm: () {
-          Get.back();
-          debugPrint("User clicked YES");
-        },
-        onCancel: () {
-          debugPrint("User clicked NO");
-        },
+      Get.dialog(
+        Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.12),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 78,
+                  height: 78,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFFFF9800),
+                        Color(0xFFFFB74D),
+                      ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFFFF9800).withOpacity(0.28),
+                        blurRadius: 18,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.warning_amber_rounded,
+                    color: Colors.white,
+                    size: 42,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  title ?? "Safety Confirmation",
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 21,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1F2937),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  body ?? "Please confirm your safety status.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.45,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFF8E1),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: const Color(0xFFFFB74D).withOpacity(0.45),
+                    ),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(
+                        Icons.info_outline,
+                        color: Color(0xFFEF6C00),
+                        size: 20,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          "Tap Yes to open the Notifications page and submit your safety confirmation.",
+                          style: TextStyle(
+                            fontSize: 13,
+                            height: 1.4,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          Get.back();
+                          debugPrint("User clicked LATER");
+                        },
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(52),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          side: BorderSide(color: Colors.grey.shade400),
+                        ),
+                        child: const Text(
+                          "Later",
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black87,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        onPressed: () {
+                          Get.back();
+                          debugPrint("User clicked YES");
+
+                          if (Get.isRegistered<NavigationController>()) {
+                            final navController =
+                            Get.find<NavigationController>();
+                            navController.changeIndex(2);
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(52),
+                          backgroundColor: const Color(0xFFFF9800),
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                        ),
+                        child: const Text(
+                          "Yes, Open",
+                          style: TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        barrierDismissible: false,
       );
     });
   }
 
   void handleIncomingMessage(RemoteMessage message) {
     final String title =
-        message.notification?.title ??
-            message.data['title'] ??
-            "New Notification";
+        message.notification?.title ?? message.data['title'] ?? "New Notification";
 
-    final String body =
-        message.notification?.body ??
-            message.data['body'] ??
-            "You have received a new message.";
+    final String body = message.notification?.body ??
+        message.data['body'] ??
+        "You have received a new message.";
 
     Future.delayed(const Duration(milliseconds: 300), () {
       if (Get.isDialogOpen ?? false) return;
 
-      Get.defaultDialog(
-        title: title,
-        middleText: body,
-        textConfirm: "OK",
-        confirmTextColor: Colors.white,
-        onConfirm: () => Get.back(),
+      Get.dialog(
+        Dialog(
+          backgroundColor: Colors.transparent,
+          insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Container(
+            padding: const EdgeInsets.all(22),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.12),
+                  blurRadius: 24,
+                  offset: const Offset(0, 12),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [
+                        Color(0xFF42A5F5),
+                        Color(0xFF1E88E5),
+                      ],
+                    ),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.notifications_active,
+                    color: Colors.white,
+                    size: 36,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  title,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1F2937),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  body,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    height: 1.45,
+                    color: Colors.grey.shade700,
+                  ),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () => Get.back(),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(52),
+                      backgroundColor: const Color(0xFF1E88E5),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                    ),
+                    child: const Text(
+                      "OK",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        barrierDismissible: true,
       );
     });
   }
