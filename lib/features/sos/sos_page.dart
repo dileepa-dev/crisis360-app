@@ -179,7 +179,7 @@ class _SosPageState extends State<SosPage> with SingleTickerProviderStateMixin {
               children: [
                 Container(
                   width: double.infinity,
-                  padding: const EdgeInsets.fromLTRB(20, 58, 20, 24),
+                  padding: const EdgeInsets.fromLTRB(20, 48, 20, 24),
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(
                       colors: [

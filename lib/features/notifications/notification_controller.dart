@@ -8,6 +8,9 @@ import 'package:delightful_toast/toast/utils/enums.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:get/get_core/src/get_main.dart';
+import 'package:get/get_navigation/src/extension_navigation.dart';
+import 'package:get/get_navigation/src/snackbar/snackbar.dart';
 import 'package:get/get_rx/src/rx_types/rx_types.dart';
 import 'package:http/http.dart' as http;
 
@@ -16,13 +19,13 @@ class NotificationsController extends ChangeNotifier {
 
   List<Map<String, dynamic>> notifications = [];
   bool isLoading = false;
+  bool isRefreshingOverlay = false;
   bool _isFetching = false;
+  bool _isDisposed = false;
 
   Timer? _timer;
   final FirebaseAuth _auth = FirebaseAuth.instance;
   String? userId;
-
-  bool _isDisposed = false;
 
   NotificationsController({required this.district}) {
     fetchLoggedUser();
@@ -30,7 +33,7 @@ class NotificationsController extends ChangeNotifier {
 
     _timer = Timer.periodic(const Duration(seconds: 10), (_) {
       if (!_isDisposed) {
-        fetchNotifications();
+        fetchNotifications(showOverlay: false);
       }
     });
   }
@@ -46,11 +49,16 @@ class NotificationsController extends ChangeNotifier {
     }
   }
 
-  Future<void> fetchNotifications() async {
+  Future<void> refreshNotificationsManually() async {
+    await fetchNotifications(showOverlay: true);
+  }
+
+  Future<void> fetchNotifications({bool showOverlay = false}) async {
     if (_isDisposed || _isFetching) return;
 
     _isFetching = true;
     isLoading = true;
+    isRefreshingOverlay = showOverlay;
     _safeNotify();
 
     try {
@@ -62,13 +70,19 @@ class NotificationsController extends ChangeNotifier {
 
       if (_isDisposed) return;
 
-      debugPrint("District: ${district.value}");
-
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
+
         notifications = data
             .map((e) => Map<String, dynamic>.from(e as Map))
             .toList();
+
+        // newest first
+        notifications.sort((a, b) {
+          final dateA = _parseNotificationDate(a['timestamp']);
+          final dateB = _parseNotificationDate(b['timestamp']);
+          return dateB.compareTo(dateA);
+        });
       } else {
         debugPrint("Failed to load notifications: ${response.statusCode}");
       }
@@ -82,13 +96,39 @@ class NotificationsController extends ChangeNotifier {
       if (_isDisposed) return;
 
       isLoading = false;
+      isRefreshingOverlay = false;
       _safeNotify();
     }
   }
 
+  DateTime _parseNotificationDate(dynamic value) {
+    if (value == null) return DateTime.fromMillisecondsSinceEpoch(0);
+
+    final text = value.toString().trim();
+    if (text.isEmpty) return DateTime.fromMillisecondsSinceEpoch(0);
+
+    try {
+      return DateTime.parse(text).toLocal();
+    } catch (_) {
+      return DateTime.fromMillisecondsSinceEpoch(0);
+    }
+  }
+
+  String formatNotificationDate(dynamic value) {
+    final date = _parseNotificationDate(value);
+
+    final year = date.year.toString().padLeft(4, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    final day = date.day.toString().padLeft(2, '0');
+    final hour = date.hour.toString().padLeft(2, '0');
+    final minute = date.minute.toString().padLeft(2, '0');
+
+    return '$year/$month/$day $hour:$minute';
+  }
+
   void showSafetyPopup(BuildContext parentContext, Map<String, dynamic> notif) {
-    final TextEditingController messageController = TextEditingController();
     final formKey = GlobalKey<FormState>();
+    final TextEditingController messageController = TextEditingController();
 
     String? isSafe;
     String? peopleCount;
@@ -102,9 +142,7 @@ class NotificationsController extends ChangeNotifier {
     showModalBottomSheet(
       context: parentContext,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (sheetContext, setState) {
@@ -113,9 +151,9 @@ class NotificationsController extends ChangeNotifier {
 
               final isFormValid = formKey.currentState?.validate() ?? false;
 
-              isSafeError = (isSafe == null) ? "Please select Yes or No" : null;
+              isSafeError = isSafe == null ? "Please select Yes or No" : null;
               needHelpError =
-              (needHelp == null) ? "Please select Yes or No" : null;
+              needHelp == null ? "Please select Yes or No" : null;
 
               setState(() {});
 
@@ -144,195 +182,393 @@ class NotificationsController extends ChangeNotifier {
                 severityLevel,
               );
 
-              if (sheetContext.mounted) {
-                setState(() {
-                  isSubmitting = false;
-                });
-              }
+              if (!sheetContext.mounted) return;
+
+              setState(() {
+                isSubmitting = false;
+              });
 
               if (success && sheetContext.mounted) {
                 Navigator.of(sheetContext).pop();
               }
             }
 
-            return Padding(
-              padding: EdgeInsets.only(
-                left: 20,
-                right: 20,
-                top: 20,
-                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20,
-              ),
-              child: SingleChildScrollView(
-                child: Form(
-                  key: formKey,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Center(
-                        child: Text(
-                          "Safety Confirmation",
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+            return SafeArea(
+              top: false,
+              child: Padding(
+                padding: EdgeInsets.only(
+                  left: 20,
+                  right: 20,
+                  top: 18,
+                  bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+                ),
+                child: Stack(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(30)),
+                      ),
+                      child: SingleChildScrollView(
+                        child: Form(
+                          key: formKey,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Center(
+                                child: Container(
+                                  width: 42,
+                                  height: 5,
+                                  decoration: BoxDecoration(
+                                    color: Colors.grey.shade300,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Row(
+                                children: [
+                                  const Expanded(
+                                    child: Text(
+                                      "Safety Confirmation",
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  // IconButton(
+                                  //   onPressed: isSubmitting
+                                  //       ? null
+                                  //       : () => Navigator.of(sheetContext).pop(),
+                                  //   icon: const Icon(Icons.close),
+                                  // ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  gradient: const LinearGradient(
+                                    colors: [
+                                      Color(0xFFFFF3F3),
+                                      Color(0xFFFFFAFA),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(20),
+                                  border: Border.all(
+                                    color: Colors.red.withOpacity(0.12),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 52,
+                                      height: 52,
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.withOpacity(0.10),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.health_and_safety_outlined,
+                                        color: Colors.red,
+                                        size: 28,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    const Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            "Please provide your current status.",
+                                            style: TextStyle(
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 20),
+
+                              _sectionTitle("Are you safe right now?"),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: RadioListTile<String>(
+                                      contentPadding: EdgeInsets.zero,
+                                      title: const Text("Yes"),
+                                      value: "YES",
+                                      groupValue: isSafe,
+                                      onChanged: (value) => setState(() {
+                                        isSafe = value;
+                                        isSafeError = null;
+                                      }),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: RadioListTile<String>(
+                                      contentPadding: EdgeInsets.zero,
+                                      title: const Text("No"),
+                                      value: "NO",
+                                      groupValue: isSafe,
+                                      onChanged: (value) => setState(() {
+                                        isSafe = value;
+                                        isSafeError = null;
+                                      }),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (isSafeError != null)
+                                Padding(
+                                  padding:
+                                  const EdgeInsets.only(left: 4, bottom: 8),
+                                  child: Text(
+                                    isSafeError!,
+                                    style: const TextStyle(
+                                      color: Colors.red,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+
+                              const SizedBox(height: 8),
+                              _sectionTitle("How many people are with you?"),
+                              DropdownButtonFormField<String>(
+                                value: peopleCount,
+                                items: const [
+                                  DropdownMenuItem(
+                                    value: "1",
+                                    child: Text("1"),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: "2-5",
+                                    child: Text("2-5"),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: "6-10",
+                                    child: Text("6-10"),
+                                  ),
+                                  DropdownMenuItem(
+                                    value: "10+",
+                                    child: Text("10+"),
+                                  ),
+                                ],
+                                onChanged: (value) =>
+                                    setState(() => peopleCount = value),
+                                decoration:
+                                _inputDecoration("Select people count"),
+                                validator: (value) {
+                                  if (value == null || value.isEmpty) {
+                                    return "Please select people count";
+                                  }
+                                  return null;
+                                },
+                              ),
+
+                              const SizedBox(height: 16),
+                              _sectionTitle(
+                                "Do you need emergency assistance?",
+                              ),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: RadioListTile<String>(
+                                      contentPadding: EdgeInsets.zero,
+                                      title: const Text("Yes"),
+                                      value: "YES",
+                                      groupValue: needHelp,
+                                      onChanged: (value) => setState(() {
+                                        needHelp = value;
+                                        needHelpError = null;
+                                      }),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    child: RadioListTile<String>(
+                                      contentPadding: EdgeInsets.zero,
+                                      title: const Text("No"),
+                                      value: "NO",
+                                      groupValue: needHelp,
+                                      onChanged: (value) => setState(() {
+                                        needHelp = value;
+                                        needHelpError = null;
+                                      }),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              if (needHelpError != null)
+                                Padding(
+                                  padding:
+                                  const EdgeInsets.only(left: 4, bottom: 8),
+                                  child: Text(
+                                    needHelpError!,
+                                    style: const TextStyle(
+                                      color: Colors.red,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ),
+
+                              const SizedBox(height: 12),
+                              _sectionTitle(
+                                "Rate the severity around you (1-5)",
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(16),
+                                  border:
+                                  Border.all(color: Colors.grey.shade200),
+                                ),
+                                child: Slider(
+                                  value: severityLevel,
+                                  min: 1,
+                                  max: 5,
+                                  divisions: 4,
+                                  label: severityLevel.toStringAsFixed(0),
+                                  activeColor: Colors.red,
+                                  onChanged: (value) =>
+                                      setState(() => severityLevel = value),
+                                ),
+                              ),
+
+                              const SizedBox(height: 16),
+                              _sectionTitle("Describe your situation"),
+                              TextFormField(
+                                controller: messageController,
+                                maxLines: 4,
+                                decoration: _inputDecoration(
+                                  "Describe what is happening...",
+                                ),
+                                validator: (value) {
+                                  final text = value?.trim() ?? "";
+                                  if (text.isEmpty) {
+                                    return "Message cannot be empty";
+                                  }
+                                  if (text.length < 5) {
+                                    return "Please enter at least 5 characters";
+                                  }
+                                  return null;
+                                },
+                              ),
+
+                              const SizedBox(height: 22),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: OutlinedButton(
+                                      onPressed: isSubmitting
+                                          ? null
+                                          : () =>
+                                          Navigator.of(sheetContext).pop(),
+                                      style: OutlinedButton.styleFrom(
+                                        minimumSize:
+                                        const Size(double.infinity, 54),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                          BorderRadius.circular(18),
+                                        ),
+                                        side: BorderSide(
+                                          color: Colors.grey.shade400,
+                                        ),
+                                      ),
+                                      child: const Text(
+                                        "Cancel",
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        minimumSize:
+                                        const Size(double.infinity, 54),
+                                        backgroundColor: Colors.red,
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius:
+                                          BorderRadius.circular(18),
+                                        ),
+                                      ),
+                                      onPressed: isSubmitting
+                                          ? null
+                                          : validateAndSubmit,
+                                      child: Text(
+                                        isSubmitting
+                                            ? "Submitting..."
+                                            : "Submit",
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
-
-                      const Text("Are you safe right now?"),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: RadioListTile<String>(
-                              title: const Text("Yes"),
-                              value: "YES",
-                              groupValue: isSafe,
-                              onChanged: (value) => setState(() {
-                                isSafe = value;
-                                isSafeError = null;
-                              }),
+                    ),
+                    if (isSubmitting)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: const Center(
+                            child: Card(
+                              shape: RoundedRectangleBorder(
+                                borderRadius:
+                                BorderRadius.all(Radius.circular(20)),
+                              ),
+                              child: Padding(
+                                padding: EdgeInsets.symmetric(
+                                  horizontal: 24,
+                                  vertical: 22,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    CircularProgressIndicator(),
+                                    SizedBox(height: 14),
+                                    Text("Submitting..."),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                          Expanded(
-                            child: RadioListTile<String>(
-                              title: const Text("No"),
-                              value: "NO",
-                              groupValue: isSafe,
-                              onChanged: (value) => setState(() {
-                                isSafe = value;
-                                isSafeError = null;
-                              }),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (isSafeError != null)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 12, bottom: 8),
-                          child: Text(
-                            isSafeError!,
-                            style: const TextStyle(
-                              color: Colors.red,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-
-                      const SizedBox(height: 10),
-                      const Text("How many people are with you?"),
-                      DropdownButtonFormField<String>(
-                        value: peopleCount,
-                        items: const [
-                          DropdownMenuItem(value: "1", child: Text("1")),
-                          DropdownMenuItem(value: "2-5", child: Text("2-5")),
-                          DropdownMenuItem(value: "6-10", child: Text("6-10")),
-                          DropdownMenuItem(value: "10+", child: Text("10+")),
-                        ],
-                        onChanged: (value) => setState(() => peopleCount = value),
-                        decoration: const InputDecoration(
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          if (value == null || value.isEmpty) {
-                            return "Please select people count";
-                          }
-                          return null;
-                        },
-                      ),
-
-                      const SizedBox(height: 15),
-                      const Text("Do you need emergency assistance?"),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: RadioListTile<String>(
-                              title: const Text("Yes"),
-                              value: "YES",
-                              groupValue: needHelp,
-                              onChanged: (value) => setState(() {
-                                needHelp = value;
-                                needHelpError = null;
-                              }),
-                            ),
-                          ),
-                          Expanded(
-                            child: RadioListTile<String>(
-                              title: const Text("No"),
-                              value: "NO",
-                              groupValue: needHelp,
-                              onChanged: (value) => setState(() {
-                                needHelp = value;
-                                needHelpError = null;
-                              }),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (needHelpError != null)
-                        Padding(
-                          padding: const EdgeInsets.only(left: 12, bottom: 8),
-                          child: Text(
-                            needHelpError!,
-                            style: const TextStyle(
-                              color: Colors.red,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ),
-
-                      const SizedBox(height: 15),
-                      const Text("Rate the severity around you (1-5)"),
-                      Slider(
-                        value: severityLevel,
-                        min: 1,
-                        max: 5,
-                        divisions: 4,
-                        label: severityLevel.toStringAsFixed(0),
-                        onChanged: (value) =>
-                            setState(() => severityLevel = value),
-                      ),
-
-                      const SizedBox(height: 15),
-                      const Text("Describe your situation"),
-                      TextFormField(
-                        controller: messageController,
-                        maxLines: 3,
-                        decoration: const InputDecoration(
-                          hintText: "Describe what is happening...",
-                          border: OutlineInputBorder(),
-                        ),
-                        validator: (value) {
-                          final text = value?.trim() ?? "";
-                          if (text.isEmpty) return "Message cannot be empty";
-                          if (text.length < 5) {
-                            return "Please enter at least 5 characters";
-                          }
-                          return null;
-                        },
-                      ),
-
-                      const SizedBox(height: 25),
-                      ElevatedButton(
-                        style: ElevatedButton.styleFrom(
-                          minimumSize: const Size(double.infinity, 50),
-                        ),
-                        onPressed: isSubmitting ? null : validateAndSubmit,
-                        child: Text(
-                          isSubmitting ? "Submitting..." : "Submit",
                         ),
                       ),
-                    ],
-                  ),
+                  ],
                 ),
               ),
             );
           },
         );
       },
-    ).whenComplete(() {
-      messageController.dispose();
-    });
+    );
   }
 
   Future<bool> submitSafetyStatus(
@@ -345,8 +581,6 @@ class NotificationsController extends ChangeNotifier {
       double severityLevel,
       ) async {
     try {
-      _showLoader(context);
-
       final position = await getUserLocation();
 
       final response = await http.post(
@@ -366,9 +600,16 @@ class NotificationsController extends ChangeNotifier {
         }),
       );
 
-      _closeLoader(context);
-
       if (response.statusCode == 200 || response.statusCode == 201) {
+        Get.snackbar(
+          "Success",
+          "Safety status submitted successfully",
+          snackPosition: SnackPosition.TOP,
+          backgroundColor: Colors.green.shade600,
+          colorText: Colors.white,
+          margin: const EdgeInsets.all(12),
+          duration: const Duration(seconds: 2),
+        );
         _showSnackbar(
           context,
           "Safety status submitted successfully ✅",
@@ -384,27 +625,8 @@ class NotificationsController extends ChangeNotifier {
         return false;
       }
     } catch (e) {
-      _closeLoader(context);
       _showSnackbar(context, "Error: ${e.toString()} ❌", Colors.red);
       return false;
-    }
-  }
-
-  void _showLoader(BuildContext context) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (_) {
-        return const Center(
-          child: CircularProgressIndicator(),
-        );
-      },
-    );
-  }
-
-  void _closeLoader(BuildContext context) {
-    if (Navigator.of(context, rootNavigator: true).canPop()) {
-      Navigator.of(context, rootNavigator: true).pop();
     }
   }
 
@@ -444,7 +666,7 @@ class NotificationsController extends ChangeNotifier {
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontWeight: FontWeight.w700,
-              fontSize: 14.0,
+              fontSize: 14,
               color: Colors.white,
             ),
           ),
@@ -460,6 +682,40 @@ class NotificationsController extends ChangeNotifier {
     if (!_isDisposed) {
       notifyListeners();
     }
+  }
+
+  InputDecoration _inputDecoration(String hint) {
+    return InputDecoration(
+      hintText: hint,
+      filled: true,
+      fillColor: Colors.grey.shade50,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.grey.shade300),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: Colors.red, width: 1.2),
+      ),
+    );
+  }
+
+  Widget _sectionTitle(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontWeight: FontWeight.w700,
+          fontSize: 15,
+        ),
+      ),
+    );
   }
 
   @override

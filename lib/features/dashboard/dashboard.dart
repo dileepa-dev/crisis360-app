@@ -84,7 +84,7 @@ class Dashboard extends StatelessWidget {
                             // ✅ Modern subtle border
                             border: Border.all(
                               color: const Color(0xFF1E85E0).withOpacity(0.65),
-                              width: 2.2,
+                              width: 1.7,
                             ),
                             boxShadow: [
                               BoxShadow(
