@@ -39,14 +39,4 @@ class FirebaseAuthService {
   Future<void> signOut() async {
     await _auth.signOut();
   }
-
-  // // Get current user
-  // User? getCurrentUser() {
-  //   return _auth.currentUser;
-  // }
-  //
-  // // Auth state changes (optional but powerful)
-  // Stream<User?> authStateChanges() {
-  //   return _auth.authStateChanges();
-  // }
 }

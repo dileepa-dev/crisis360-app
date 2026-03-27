@@ -248,11 +248,11 @@ class LoginPageImage extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Image.asset(
-            'assets/images/login_page_image.png', // change if needed
+            'assets/images/login_page_image.png',
             width: 220,
             fit: BoxFit.contain,
           ),
-          const SizedBox(height: 26), // spacing between image and text
+          const SizedBox(height: 26),
           const Text(
             'Welcome Back !',
             style: TextStyle(
